@@ -15,13 +15,10 @@
 package server
 
 import (
+	"context"
 	"fmt"
-	"sort"
-	"strings"
 	"sync"
-	"time"
 
-	"github.com/golang/glog"
 	rpc "github.com/googleapis/googleapis/google/rpc"
 
 	configpb "istio.io/api/config/v1"
@@ -29,16 +26,14 @@ import (
 )
 
 type watcher struct {
-	stream               configpb.Watcher_WatchServer
-	keyPrefix            string
-	sendPut              bool
-	sendDelete           bool
-	lastNotifiedRevision int64
+	stream configpb.Watcher_WatchServer
+	c      <-chan store.ChangeList
+	cancel context.CancelFunc
 }
 
 type watcherServer struct {
 	kvs store.KeyValueStore
-	cr  store.ChangeLogReader
+	cw  store.ChangeWatcher
 
 	lastNotifiedIndex int
 	lastFetchedIndex  int
@@ -53,111 +48,12 @@ var _ configpb.WatcherServer = &watcherServer{}
 // the specified storage.
 func NewWatcherServer(kvs store.KeyValueStore) (*watcherServer, error) {
 	s := &watcherServer{kvs: kvs, watchers: map[int64]*watcher{}}
-	if cn, ok := kvs.(store.ChangeNotifier); ok {
-		cn.RegisterListener(s)
+	if cw, ok := kvs.(store.ChangeWatcher); ok {
+		s.cw = cw
 	} else {
-		return nil, fmt.Errorf("config store %s is not a change notifier", kvs)
-	}
-	if cr, ok := kvs.(store.ChangeLogReader); ok {
-		s.cr = cr
-	} else {
-		return nil, fmt.Errorf("config store %s is not changelog readable", kvs)
+		return nil, fmt.Errorf("config store %s is not a change watcher", kvs)
 	}
 	return s, nil
-}
-
-func (s *watcherServer) start(interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	go func() {
-		for range ticker.C {
-			s.check()
-		}
-	}()
-}
-
-func (s *watcherServer) check() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.lastFetchedIndex < s.lastNotifiedIndex {
-		changes, err := s.cr.Read(s.lastFetchedIndex)
-		if err != nil {
-			glog.Warningf("failed to read changes: %v", err)
-			return
-		}
-		for _, c := range changes {
-			if c.Index < s.lastFetchedIndex {
-				s.lastFetchedIndex = c.Index
-			}
-		}
-		toSend := s.filterEvents(s.watchers, changes)
-		for id, evs := range toSend {
-			s.watchers[id].stream.Send(&configpb.WatchResponse{
-				WatchId: id,
-				Status: &rpc.Status{
-					Code: int32(rpc.Code_OK),
-				},
-				ResponseUnion: &configpb.WatchResponse_Events{&configpb.WatchEvents{evs}},
-			})
-		}
-	}
-}
-
-func (s *watcherServer) NotifyStoreChanged(index int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.lastNotifiedIndex = index
-}
-
-func (s *watcherServer) filterEvents(watchers map[int64]*watcher, changes []store.Change) map[int64][]*configpb.Event {
-	toSend := map[int64][]*configpb.Event{}
-
-	sort.Slice(changes, func(i, j int) bool {
-		return changes[i].Index > changes[j].Index
-	})
-	visited := map[string]bool{}
-	filtered := make([]store.Change, 0, len(changes))
-	for _, c := range changes {
-		if visited[c.Key] {
-			continue
-		}
-		visited[c.Key] = true
-		filtered = append(filtered, c)
-	}
-
-	for _, c := range filtered {
-		meta, err := pathToMeta(c.Key)
-		if err != nil {
-			glog.Warningf("%v", err)
-			continue
-		}
-		ev := &configpb.Event{
-			Kv: &configpb.Object{Meta: meta},
-		}
-		dataFetched := false
-		if c.Type == store.Update {
-			ev.Type = configpb.Event_UPDATE
-		} else {
-			ev.Type = configpb.Event_DELETE
-		}
-		for id, w := range watchers {
-			if strings.HasPrefix(c.Key, w.keyPrefix) && w.lastNotifiedRevision < int64(c.Index) {
-				if c.Type == store.Update && !dataFetched {
-					dataFetched = true
-					data, _, found := s.kvs.Get(c.Key)
-					if found {
-						glog.Warningf("failed to fetch data for key %s", c.Key)
-					}
-					ev.Kv, err = buildObject(data, ev.Kv.Meta, &configpb.ObjectFieldInclude{Data: true, SourceData: true})
-					if err != nil {
-						glog.Warningf("failed to builds an object for key %s: %v", c.Key, err)
-					}
-				}
-				toSend[id] = append(toSend[id], ev)
-				w.lastNotifiedRevision = int64(c.Index)
-			}
-		}
-	}
-	return toSend
 }
 
 func (s *watcherServer) startWatch(req *configpb.WatchCreateRequest, stream configpb.Watcher_WatchServer) {
@@ -176,11 +72,37 @@ func (s *watcherServer) startWatch(req *configpb.WatchCreateRequest, stream conf
 
 	id := s.nextWatcherID
 	s.nextWatcherID++
+	c, cancel := s.cw.Watch(buildPath(req.Subtree))
 	s.watchers[id] = &watcher{
-		keyPrefix:            buildPath(req.Subtree),
-		stream:               stream,
-		lastNotifiedRevision: req.StartRevision - 1,
+		c:      c,
+		stream: stream,
+		cancel: cancel,
 	}
+	go func() {
+		for cl := range c {
+			evs := &configpb.WatchEvents{}
+			for _, change := range cl.Changes {
+				meta, err := pathToMeta(change.Key)
+				ev := &configpb.Event{}
+				if change.Type == store.Update {
+					ev.Kv, err = buildObject(change.Value, meta, &configpb.ObjectFieldInclude{true, true})
+					if err != nil {
+						continue
+					}
+					ev.Type = configpb.Event_UPDATE
+				} else {
+					ev.Kv = &configpb.Object{Meta: meta}
+					ev.Type = configpb.Event_DELETE
+				}
+				evs.Events = append(evs.Events, ev)
+			}
+			stream.Send(&configpb.WatchResponse{
+				WatchId:       id,
+				Status:        &rpc.Status{Code: int32(rpc.Code_OK)},
+				ResponseUnion: &configpb.WatchResponse_Events{evs},
+			})
+		}
+	}()
 	stream.Send(&configpb.WatchResponse{
 		WatchId:       id,
 		Status:        &rpc.Status{Code: int32(rpc.Code_OK)},
@@ -191,21 +113,17 @@ func (s *watcherServer) startWatch(req *configpb.WatchCreateRequest, stream conf
 func (s *watcherServer) cancelWatch(req *configpb.WatchCancelRequest, stream configpb.Watcher_WatchServer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	w, ok := s.watchers[req.WatchId]
 	resp := &configpb.WatchResponse{
 		WatchId:       req.WatchId,
 		ResponseUnion: &configpb.WatchResponse_Canceled{&configpb.WatchCanceled{}},
 	}
-	_, found := s.watchers[req.WatchId]
-	if found {
-		delete(s.watchers, req.WatchId)
-		resp.Status = &rpc.Status{
-			Code: int32(rpc.Code_OK),
-		}
+	if !ok {
+		resp.Status = &rpc.Status{Code: int32(rpc.Code_NOT_FOUND)}
 	} else {
-		resp.Status = &rpc.Status{
-			Code:    int32(rpc.Code_NOT_FOUND),
-			Message: fmt.Sprintf("watcher id %d not found", req.WatchId),
-		}
+		w.cancel()
+		delete(s.watchers, req.WatchId)
+		resp.Status = &rpc.Status{Code: int32(rpc.Code_OK)}
 	}
 	stream.Send(resp)
 }

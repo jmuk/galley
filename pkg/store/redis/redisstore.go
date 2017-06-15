@@ -44,13 +44,10 @@ type subscriber struct {
 	lastIndex int
 	changes   []store.Change
 	mu        sync.Mutex
-	listener  store.Listener
 	running   bool
 }
 
 type redisStore struct {
-	*subscriber
-
 	client *redis.Client
 
 	// The URL connecting to the database.
@@ -60,9 +57,6 @@ type redisStore struct {
 	// reduce the number of allocations for similar quries.
 	listLength int
 }
-
-var _ store.ChangeNotifier = &redisStore{}
-var _ store.ChangeLogReader = &redisStore{}
 
 // doesConfigSupportsChangeNotifications returns true when the passed string contains the
 // wanted value described in https://redis.io/topics/notifications#configuration
@@ -150,21 +144,7 @@ func newStore(u *url.URL) (store.KeyValueStore, error) {
 		url:    u,
 	}
 	if rs.getKeyspaceAvailability() {
-		// It's better to set the timeout for subscriber client, otherwise client.Recieve()
-		// will block forever. The time is currently static and unconfigurable.
-		sclient, err := setupConnection(u.Host, password, dbNum, subscriberTimeout)
-		if err != nil {
-			glog.Warningf("failed to set up subscriber: %v", err)
-			return rs, nil
-		}
-		sub := &subscriber{
-			client: pubsub.NewSubClient(sclient),
-		}
-		if err := sub.listen(dbNum); err != nil {
-			glog.Warningf("failed to start subscription: %v", err)
-		} else {
-			rs.subscriber = sub
-		}
+		// TODO: redesign the subscription.
 	}
 	return rs, nil
 }
@@ -273,9 +253,6 @@ func (rs *redisStore) Close() {
 	if err := rs.client.Close(); err != nil {
 		glog.Warningf("failed to close the connection: %v", err)
 	}
-	if rs.subscriber != nil {
-		rs.subscriber.Close()
-	}
 }
 
 // listen initiates the subscription of the changes, and starts a goroutine to listen updates.
@@ -303,26 +280,7 @@ func (sub *subscriber) listen(dbNum uint64) error {
 				break
 			}
 			if resp.Type == pubsub.Message {
-				op := resp.Channel[strings.Index(resp.Channel, ":")+1:]
-				c := store.Change{
-					Index: sub.lastIndex + 1,
-					Key:   resp.Message,
-				}
-				if op == "set" {
-					c.Type = store.Update
-				} else if op == "del" {
-					c.Type = store.Delete
-				} else {
-					continue
-				}
-				sub.mu.Lock()
-				sub.changes = append(sub.changes, c)
-				sub.lastIndex++
-				l := sub.listener
-				sub.mu.Unlock()
-				if l != nil {
-					l.NotifyStoreChanged(sub.lastIndex)
-				}
+				// TBD
 			}
 		}
 		sub.client.PUnsubscribe(pattern)
@@ -340,28 +298,6 @@ func (sub *subscriber) Close() {
 		return
 	}
 	sub.running = false
-}
-
-// RegisterListener implements a ChangeNotifier method.
-func (sub *subscriber) RegisterListener(s store.Listener) {
-	if sub == nil {
-		return
-	}
-	sub.mu.Lock()
-	sub.listener = s
-	sub.mu.Unlock()
-}
-
-// Read implements a ChangeLogReader method.
-func (sub *subscriber) Read(index int) ([]store.Change, error) {
-	sub.mu.Lock()
-	defer sub.mu.Unlock()
-	for i := len(sub.changes) - 1; i >= 0; i-- {
-		if sub.changes[i].Index <= index {
-			return sub.changes[i+1:], nil
-		}
-	}
-	return sub.changes, nil
 }
 
 // Register registers this module as a config store.

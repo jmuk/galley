@@ -219,7 +219,7 @@ new_git_or_local_repository(
     path = "../api",
     remote = "https://github.com/istio/api.git",
     # Change this to True to use ../api directory
-    use_local = False,
+    use_local = True,
 )
 
 new_http_archive(
@@ -479,6 +479,12 @@ new_go_repository(
     name = "com_github_hashicorp_golang_lru",
     commit = "0a025b7e63adc15a622f29b0b2c4c3848243bbf6", # Aug 13, 2016 (no releases)
     importpath = "github.com/hashicorp/golang-lru",
+)
+
+new_go_repository(
+    name = "com_github_coreos_etcd",
+    commit = "56841bbc5f7e183ebd2f7529d5d5edcffb9945a3",  # Jun 9, 2017 (no release)
+    importpath = "github.com/coreos/etcd",
 )
 
 ##

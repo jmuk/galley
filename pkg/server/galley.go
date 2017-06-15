@@ -109,7 +109,5 @@ func (s *Server) Start(port, gatewayPort uint16, interval time.Duration) error {
 	configpb.RegisterServiceServer(gs, s.c)
 	configpb.RegisterWatcherServer(gs, s.w)
 
-	s.w.start(interval)
-
 	return gs.Serve(listener)
 }

@@ -17,6 +17,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 )
@@ -25,8 +26,10 @@ import (
 // the KeyValueStore implementation does not support index.
 const IndexNotSupported = -1
 
+// Builder is the type to build a KeyValueStore.
 type Builder func(u *url.URL) (KeyValueStore, error)
 
+// RegisterFunc is the type to register a new builder for a scheme.
 type RegisterFunc func(map[string]Builder)
 
 // ChangeType denotes the type of a change
@@ -45,8 +48,20 @@ type Change struct {
 	Key string `json:"key"`
 	// Type how did the key change
 	Type ChangeType `json:"change_type"`
+	// The new value when Updated (empty when Deleted)
+	Value string
+	// The previous value before the change.
+	PrevValue string
 	// change log index number of the change
 	Index int `json:"index"`
+}
+
+// ChangeList bundles multiple changes in a notification.
+type ChangeList struct {
+	// The list of changes.
+	Changes []Change
+	// The new storage revision after the change.
+	Revision int
 }
 
 // KeyValueStore defines the key value store back end interface used by mixer
@@ -75,37 +90,23 @@ type KeyValueStore interface {
 	fmt.Stringer
 }
 
-// ChangeLogReader read change log from the KV Store
-type ChangeLogReader interface {
-	// Read reads change events >= index
-	Read(index int) ([]Change, error)
+// ChangeWatcher offers the interface for subscribing changes.
+type ChangeWatcher interface {
+	Watch(prefix string) (<-chan ChangeList, context.CancelFunc)
 }
 
-// ChangeNotifier implements change notification machinery for the KeyValueStore.
-type ChangeNotifier interface {
-	// Register StoreListener
-	// KeyValueStore should call this method when there is a change
-	// The client should issue ReadChangeLog to see what has changed if the call is available.
-	// else it should re-read the store, perform diff and apply changes.
-	RegisterListener(s Listener)
-}
-
-// Listener listens for calls from the store that some keys have changed.
-type Listener interface {
-	// NotifyStoreChanged notify listener that a new change is available.
-	NotifyStoreChanged(index int)
-}
-
-type registry struct {
+// Registry remembers the relationship between the URL scheme and the backend storage.
+type Registry struct {
 	builders map[string]Builder
 }
 
-func NewRegistry(inventory ...RegisterFunc) *registry {
+// NewRegistry creates a new registry to build a store from the URL.
+func NewRegistry(inventory ...RegisterFunc) *Registry {
 	b := map[string]Builder{}
 	for _, rf := range inventory {
 		rf(b)
 	}
-	return &registry{builders: b}
+	return &Registry{builders: b}
 }
 
 // URL types supported by the config store
@@ -115,7 +116,7 @@ const (
 )
 
 // NewStore create a new store based on the config URL.
-func (r *registry) NewStore(configURL string) (KeyValueStore, error) {
+func (r *Registry) NewStore(configURL string) (KeyValueStore, error) {
 	u, err := url.Parse(configURL)
 
 	if err != nil {

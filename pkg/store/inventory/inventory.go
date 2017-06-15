@@ -16,12 +16,14 @@ package inventory
 
 import (
 	"istio.io/galley/pkg/store"
+	"istio.io/galley/pkg/store/etcd"
 	"istio.io/galley/pkg/store/redis"
 )
 
 // NewInventory returns the default set of register functions.
 func NewInventory() []store.RegisterFunc {
 	return []store.RegisterFunc{
+		etcd.Register,
 		redis.Register,
 	}
 }
