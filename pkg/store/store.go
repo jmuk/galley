@@ -17,10 +17,9 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"io"
-
-	"context"
 )
 
 // KeyValue provides a generic interface to a key value store.

@@ -126,8 +126,20 @@ new_git_repository(
 )
 
 new_go_repository(
+    name = "org_golang_x_net",
+    commit = "fe686d45ea04bc1bd4eff6a52865ce8757320325",  # Jun 18, 2017 (no release)
+    importpath = "golang.org/x/net",
+)
+
+new_go_repository(
+    name = "org_golang_google_genproto",
+    commit = "aa2eb687b4d3e17154372564ad8d6bf11c3cf21f",  # Jun 1, 2017 (no release)
+    importpath = "google.golang.org/genproto",
+)
+
+new_go_repository(
     name = "org_golang_google_grpc",
-    commit = "cdee119ee21e61eef7093a41ba148fa83585e143",  # Mar 14, 2017 (v1.2.0)
+    commit = "d2e1b51f33ff8c5e4a15560ff049d200e83726c5",  # Apr 18, 2017 (v1.3.0)
     importpath = "google.golang.org/grpc",
 )
 
@@ -448,6 +460,12 @@ new_go_repository(
     name = "com_github_hashicorp_golang_lru",
     commit = "0a025b7e63adc15a622f29b0b2c4c3848243bbf6", # Aug 13, 2016 (no releases)
     importpath = "github.com/hashicorp/golang-lru",
+)
+
+new_go_repository(
+    name = "com_github_coreos_etcd",
+    commit = "117a83c1bf04880f3a5d9ca07c5c6153fa17c161",  # Jun 20, 2017 (no release)
+    importpath = "github.com/coreos/etcd",
 )
 
 ##
