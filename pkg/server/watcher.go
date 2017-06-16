@@ -59,7 +59,7 @@ func NewWatcherServer(kvs store.KeyValueStore) (*watcherServer, error) {
 func (s *watcherServer) startWatch(req *galleypb.WatchCreateRequest, stream galleypb.Watcher_WatchServer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	objs, _, err := readKvsToObjects(s.kvs, buildPath(req.Subtree), &galleypb.ObjectFieldInclude{true, true})
+	objs, revision, err := readKvsToObjects(s.kvs, buildPath(req.Subtree))
 	if err != nil {
 		stream.Send(&galleypb.WatchResponse{
 			Status: &rpc.Status{
@@ -85,7 +85,7 @@ func (s *watcherServer) startWatch(req *galleypb.WatchCreateRequest, stream gall
 				meta, err := pathToMeta(change.Key)
 				ev := &galleypb.Event{}
 				if change.Type == store.Update {
-					ev.Kv, err = buildObject(change.Value, meta, &galleypb.ObjectFieldInclude{true, true})
+					ev.Kv, err = buildObject(change.Value, meta)
 					if err != nil {
 						continue
 					}
@@ -104,9 +104,12 @@ func (s *watcherServer) startWatch(req *galleypb.WatchCreateRequest, stream gall
 		}
 	}()
 	stream.Send(&galleypb.WatchResponse{
-		WatchId:       id,
-		Status:        &rpc.Status{Code: int32(rpc.Code_OK)},
-		ResponseUnion: &galleypb.WatchResponse_Created{&galleypb.WatchCreated{objs}},
+		WatchId: id,
+		Status:  &rpc.Status{Code: int32(rpc.Code_OK)},
+		ResponseUnion: &galleypb.WatchResponse_Created{&galleypb.WatchCreated{
+			InitialState:    objs,
+			CurrentRevision: int64(revision),
+		}},
 	})
 }
 

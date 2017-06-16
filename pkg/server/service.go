@@ -45,7 +45,7 @@ func (s *GalleyService) GetObject(ctx context.Context, req *galleypb.GetObjectRe
 	if !found {
 		return nil, fmt.Errorf("object not found")
 	}
-	resp, err = buildObject(value, req.Meta, req.IncludeFields)
+	resp, err = buildObject(value, req.Meta)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (s *GalleyService) GetObject(ctx context.Context, req *galleypb.GetObjectRe
 
 // ListObjects implements a galleypb.Galley method.
 func (s *GalleyService) ListObjects(ctx context.Context, req *galleypb.ListObjectsRequest) (resp *galleypb.ObjectList, err error) {
-	objs, revision, err := readKvsToObjects(s.kvs, buildPath(req.Meta), req.IncludeFields)
+	objs, revision, err := readKvsToObjects(s.kvs, buildPath(req.Meta))
 	if err != nil {
 		return nil, err
 	}

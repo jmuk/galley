@@ -51,23 +51,19 @@ func pathToMeta(path string) (*galleypb.Meta, error) {
 	}, nil
 }
 
-func buildObject(data string, meta *galleypb.Meta, incl *galleypb.ObjectFieldInclude) (obj *galleypb.Object, err error) {
+func buildObject(data string, meta *galleypb.Meta) (obj *galleypb.Object, err error) {
 	src := &structpb.Struct{}
 	err = jsonpb.UnmarshalString(data, src)
 	if err != nil {
 		return nil, err
 	}
 	obj = &galleypb.Object{Meta: meta}
-	if incl != nil && incl.SourceData {
-		obj.SourceData = src
-	}
-	if incl != nil && incl.Data {
-		glog.Infof("data is requested, but not supported yet")
-	}
+	obj.SourceData = src
+	// TODO: obtain the binary data.
 	return obj, nil
 }
 
-func readKvsToObjects(kvs store.KeyValueStore, prefix string, incl *galleypb.ObjectFieldInclude) (objs []*galleypb.Object, revision int64, err error) {
+func readKvsToObjects(kvs store.KeyValueStore, prefix string) (objs []*galleypb.Object, revision int64, err error) {
 	keys, index, err := kvs.List(prefix, true)
 	if err != nil {
 		return nil, 0, err
@@ -79,22 +75,17 @@ func readKvsToObjects(kvs store.KeyValueStore, prefix string, incl *galleypb.Obj
 			continue
 		}
 		var obj *galleypb.Object
-		if incl != nil && (incl.SourceData || incl.Data) {
-			value, gindex, found := kvs.Get(k)
-			if !found {
-				glog.Warningf("not found: %s", k)
-				continue
-			}
-			obj, err = buildObject(value, m, incl)
-			if err != nil {
-				glog.Warningf("error on fetching the content for %s: %v", k, err)
-				continue
-			}
-			obj.Meta.Revision = int64(gindex)
-		} else {
-			obj = &galleypb.Object{Meta: m}
-			obj.Meta.Revision = int64(index)
+		value, gindex, found := kvs.Get(k)
+		if !found {
+			glog.Warningf("not found: %s", k)
+			continue
 		}
+		obj, err = buildObject(value, m)
+		if err != nil {
+			glog.Warningf("error on fetching the content for %s: %v", k, err)
+			continue
+		}
+		obj.Meta.Revision = int64(gindex)
 		objs = append(objs, obj)
 	}
 	return objs, int64(index), err
