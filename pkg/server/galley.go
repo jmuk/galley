@@ -35,7 +35,7 @@ const maxMessageSize uint = 1024 * 1024
 
 // Server data
 type Server struct {
-	c *configAPIServer
+	c *GalleyService
 	w *watcherServer
 }
 
@@ -45,7 +45,7 @@ func CreateServer(url string) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := NewServiceServer(kvs)
+	c, err := NewGalleyService(kvs)
 	if err != nil {
 		return nil, err
 	}

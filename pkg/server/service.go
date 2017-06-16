@@ -27,20 +27,18 @@ import (
 	"istio.io/galley/pkg/store"
 )
 
-type configAPIServer struct {
+type GalleyService struct {
 	// TODO: allow multiple kvs.
 	kvs store.KeyValueStore
 }
 
-var _ configpb.ServiceServer = &configAPIServer{}
-
-// NewServiceServer creates a new configpb.ServiceServer instance with the
+// NewGalleyService creates a new configpb.ServiceServer instance with the
 // specified storage.
-func NewServiceServer(kvs store.KeyValueStore) (*configAPIServer, error) {
-	return &configAPIServer{kvs}, nil
+func NewGalleyService(kvs store.KeyValueStore) (*GalleyService, error) {
+	return &GalleyService{kvs}, nil
 }
 
-func (s *configAPIServer) GetObject(ctx context.Context, req *configpb.GetObjectRequest) (resp *configpb.Object, err error) {
+func (s *GalleyService) GetObject(ctx context.Context, req *configpb.GetObjectRequest) (resp *configpb.Object, err error) {
 	value, index, found := s.kvs.Get(buildPath(req.Meta))
 	if !found {
 		return nil, fmt.Errorf("object not found")
@@ -53,7 +51,7 @@ func (s *configAPIServer) GetObject(ctx context.Context, req *configpb.GetObject
 	return resp, nil
 }
 
-func (s *configAPIServer) ListObjects(ctx context.Context, req *configpb.ListObjectsRequest) (resp *configpb.ObjectList, err error) {
+func (s *GalleyService) ListObjects(ctx context.Context, req *configpb.ListObjectsRequest) (resp *configpb.ObjectList, err error) {
 	objs, revision, err := readKvsToObjects(s.kvs, buildPath(req.Meta), req.Incl)
 	if err != nil {
 		return nil, err
@@ -65,7 +63,7 @@ func (s *configAPIServer) ListObjects(ctx context.Context, req *configpb.ListObj
 	}, nil
 }
 
-func (s *configAPIServer) ListObjectTypes(ctx context.Context, req *configpb.ListObjectTypesRequest) (resp *configpb.ObjectTypeList, err error) {
+func (s *GalleyService) ListObjectTypes(ctx context.Context, req *configpb.ListObjectTypesRequest) (resp *configpb.ObjectTypeList, err error) {
 	var prefix string
 	if req.Meta == nil || (req.Meta.ApiGroup == "" && req.Meta.ApiGroupVersion == "") {
 		prefix = "/"
@@ -95,7 +93,7 @@ func (s *configAPIServer) ListObjectTypes(ctx context.Context, req *configpb.Lis
 	return resp, nil
 }
 
-func (s *configAPIServer) CreateObject(ctx context.Context, req *configpb.CreateObjectRequest) (resp *configpb.Object, err error) {
+func (s *GalleyService) CreateObject(ctx context.Context, req *configpb.CreateObjectRequest) (resp *configpb.Object, err error) {
 	value, err := (&jsonpb.Marshaler{}).MarshalToString(req.SourceData)
 	if err != nil {
 		return nil, err
@@ -109,11 +107,11 @@ func (s *configAPIServer) CreateObject(ctx context.Context, req *configpb.Create
 	return resp, nil
 }
 
-func (s *configAPIServer) UpdateObject(ctx context.Context, req *configpb.UpdateObjectRequest) (resp *configpb.Object, err error) {
+func (s *GalleyService) UpdateObject(ctx context.Context, req *configpb.UpdateObjectRequest) (resp *configpb.Object, err error) {
 	return s.CreateObject(ctx, &configpb.CreateObjectRequest{Meta: req.Meta, SourceData: req.SourceData})
 }
 
-func (s *configAPIServer) DeleteObject(ctx context.Context, req *configpb.DeleteObjectRequest) (resp *emptypb.Empty, err error) {
+func (s *GalleyService) DeleteObject(ctx context.Context, req *configpb.DeleteObjectRequest) (resp *emptypb.Empty, err error) {
 	err = s.kvs.Delete(buildPath(req.Meta))
 	return &emptypb.Empty{}, err
 }
