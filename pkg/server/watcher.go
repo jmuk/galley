@@ -21,12 +21,12 @@ import (
 
 	rpc "github.com/googleapis/googleapis/google/rpc"
 
-	configpb "istio.io/api/config/v1"
+	galleypb "istio.io/api/galley/v1"
 	"istio.io/galley/pkg/store"
 )
 
 type watcher struct {
-	stream configpb.Watcher_WatchServer
+	stream galleypb.Watcher_WatchServer
 	c      <-chan store.ChangeList
 	cancel context.CancelFunc
 }
@@ -42,9 +42,9 @@ type watcherServer struct {
 	mu                sync.Mutex
 }
 
-var _ configpb.WatcherServer = &watcherServer{}
+var _ galleypb.WatcherServer = &watcherServer{}
 
-// NewWatcherServer creates a new configpb.WatcherServer instance with
+// NewWatcherServer creates a new galleypb.WatcherServer instance with
 // the specified storage.
 func NewWatcherServer(kvs store.KeyValueStore) (*watcherServer, error) {
 	s := &watcherServer{kvs: kvs, watchers: map[int64]*watcher{}}
@@ -56,12 +56,12 @@ func NewWatcherServer(kvs store.KeyValueStore) (*watcherServer, error) {
 	return s, nil
 }
 
-func (s *watcherServer) startWatch(req *configpb.WatchCreateRequest, stream configpb.Watcher_WatchServer) {
+func (s *watcherServer) startWatch(req *galleypb.WatchCreateRequest, stream galleypb.Watcher_WatchServer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	objs, _, err := readKvsToObjects(s.kvs, buildPath(req.Subtree), &configpb.ObjectFieldInclude{true, true})
+	objs, _, err := readKvsToObjects(s.kvs, buildPath(req.Subtree), &galleypb.ObjectFieldInclude{true, true})
 	if err != nil {
-		stream.Send(&configpb.WatchResponse{
+		stream.Send(&galleypb.WatchResponse{
 			Status: &rpc.Status{
 				Code:    int32(rpc.Code_INTERNAL),
 				Message: err.Error(),
@@ -80,43 +80,43 @@ func (s *watcherServer) startWatch(req *configpb.WatchCreateRequest, stream conf
 	}
 	go func() {
 		for cl := range c {
-			evs := &configpb.WatchEvents{}
+			evs := &galleypb.WatchEvents{}
 			for _, change := range cl.Changes {
 				meta, err := pathToMeta(change.Key)
-				ev := &configpb.Event{}
+				ev := &galleypb.Event{}
 				if change.Type == store.Update {
-					ev.Kv, err = buildObject(change.Value, meta, &configpb.ObjectFieldInclude{true, true})
+					ev.Kv, err = buildObject(change.Value, meta, &galleypb.ObjectFieldInclude{true, true})
 					if err != nil {
 						continue
 					}
-					ev.Type = configpb.Event_UPDATE
+					ev.Type = galleypb.Event_PUT
 				} else {
-					ev.Kv = &configpb.Object{Meta: meta}
-					ev.Type = configpb.Event_DELETE
+					ev.Kv = &galleypb.Object{Meta: meta}
+					ev.Type = galleypb.Event_DELETE
 				}
 				evs.Events = append(evs.Events, ev)
 			}
-			stream.Send(&configpb.WatchResponse{
+			stream.Send(&galleypb.WatchResponse{
 				WatchId:       id,
 				Status:        &rpc.Status{Code: int32(rpc.Code_OK)},
-				ResponseUnion: &configpb.WatchResponse_Events{evs},
+				ResponseUnion: &galleypb.WatchResponse_Events{evs},
 			})
 		}
 	}()
-	stream.Send(&configpb.WatchResponse{
+	stream.Send(&galleypb.WatchResponse{
 		WatchId:       id,
 		Status:        &rpc.Status{Code: int32(rpc.Code_OK)},
-		ResponseUnion: &configpb.WatchResponse_Created{&configpb.WatchCreated{objs}},
+		ResponseUnion: &galleypb.WatchResponse_Created{&galleypb.WatchCreated{objs}},
 	})
 }
 
-func (s *watcherServer) cancelWatch(req *configpb.WatchCancelRequest, stream configpb.Watcher_WatchServer) {
+func (s *watcherServer) cancelWatch(req *galleypb.WatchCancelRequest, stream galleypb.Watcher_WatchServer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	w, ok := s.watchers[req.WatchId]
-	resp := &configpb.WatchResponse{
+	resp := &galleypb.WatchResponse{
 		WatchId:       req.WatchId,
-		ResponseUnion: &configpb.WatchResponse_Canceled{&configpb.WatchCanceled{}},
+		ResponseUnion: &galleypb.WatchResponse_Canceled{&galleypb.WatchCanceled{}},
 	}
 	if !ok {
 		resp.Status = &rpc.Status{Code: int32(rpc.Code_NOT_FOUND)}
@@ -128,7 +128,7 @@ func (s *watcherServer) cancelWatch(req *configpb.WatchCancelRequest, stream con
 	stream.Send(resp)
 }
 
-func (s *watcherServer) Watch(stream configpb.Watcher_WatchServer) error {
+func (s *watcherServer) Watch(stream galleypb.Watcher_WatchServer) error {
 	for {
 		req, err := stream.Recv()
 		if err != nil {

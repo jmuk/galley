@@ -25,7 +25,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 
-	configpb "istio.io/api/config/v1"
+	galleypb "istio.io/api/galley/v1"
 	"istio.io/galley/pkg/store"
 	"istio.io/galley/pkg/store/inventory"
 )
@@ -66,7 +66,7 @@ func (s *Server) startGateway(grpcPort, restPort uint16) error {
 		grpc.WithCompressor(grpc.NewGZIPCompressor()),
 		grpc.WithDecompressor(grpc.NewGZIPDecompressor()),
 	}
-	err := configpb.RegisterServiceHandlerFromEndpoint(ctx, mux, fmt.Sprintf("localhost:%d", grpcPort), opts)
+	err := galleypb.RegisterGalleyHandlerFromEndpoint(ctx, mux, fmt.Sprintf("localhost:%d", grpcPort), opts)
 	if err != nil {
 		return err
 	}
@@ -106,8 +106,8 @@ func (s *Server) Start(port, restPort uint16) error {
 	// 	grpcOptions = append(grpcOptions, grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer)))
 	// }
 	gs := grpc.NewServer(grpcOptions...)
-	configpb.RegisterServiceServer(gs, s.c)
-	configpb.RegisterWatcherServer(gs, s.w)
+	galleypb.RegisterGalleyServer(gs, s.c)
+	galleypb.RegisterWatcherServer(gs, s.w)
 
 	return gs.Serve(listener)
 }

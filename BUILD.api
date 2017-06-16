@@ -10,7 +10,7 @@ go_prefix("istio.io/api")
 load("@org_pubref_rules_protobuf//grpc_gateway:rules.bzl", "grpc_gateway_proto_library")
 
 grpc_gateway_proto_library(
-    name = "config/v1",
+    name = "galley/v1",
     importmap = {
         "google/protobuf/empty.proto": "github.com/golang/protobuf/ptypes/empty",
         "google/protobuf/struct.proto": "github.com/golang/protobuf/ptypes/struct",
@@ -27,7 +27,7 @@ grpc_gateway_proto_library(
         "@com_github_googleapis_googleapis//:status_proto",
     ],
     protos = [
-        "config/v1/service.proto",
+        "galley/v1/service.proto",
     ],
     verbose = 0,
     visibility = ["//visibility:public"],

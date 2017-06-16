@@ -23,27 +23,29 @@ import (
 	emptypb "github.com/golang/protobuf/ptypes/empty"
 	"golang.org/x/net/context"
 
-	configpb "istio.io/api/config/v1"
+	galleypb "istio.io/api/galley/v1"
 	"istio.io/galley/pkg/store"
 )
 
+// GalleyService is the implementation of galleypb.Galley service.
 type GalleyService struct {
 	// TODO: allow multiple kvs.
 	kvs store.KeyValueStore
 }
 
-// NewGalleyService creates a new configpb.ServiceServer instance with the
+// NewGalleyService creates a new galleypb.GalleyService instance with the
 // specified storage.
 func NewGalleyService(kvs store.KeyValueStore) (*GalleyService, error) {
 	return &GalleyService{kvs}, nil
 }
 
-func (s *GalleyService) GetObject(ctx context.Context, req *configpb.GetObjectRequest) (resp *configpb.Object, err error) {
+// GetObject implements a galleypb.Galley method.
+func (s *GalleyService) GetObject(ctx context.Context, req *galleypb.GetObjectRequest) (resp *galleypb.Object, err error) {
 	value, index, found := s.kvs.Get(buildPath(req.Meta))
 	if !found {
 		return nil, fmt.Errorf("object not found")
 	}
-	resp, err = buildObject(value, req.Meta, req.Incl)
+	resp, err = buildObject(value, req.Meta, req.IncludeFields)
 	if err != nil {
 		return nil, err
 	}
@@ -51,29 +53,31 @@ func (s *GalleyService) GetObject(ctx context.Context, req *configpb.GetObjectRe
 	return resp, nil
 }
 
-func (s *GalleyService) ListObjects(ctx context.Context, req *configpb.ListObjectsRequest) (resp *configpb.ObjectList, err error) {
-	objs, revision, err := readKvsToObjects(s.kvs, buildPath(req.Meta), req.Incl)
+// ListObjects implements a galleypb.Galley method.
+func (s *GalleyService) ListObjects(ctx context.Context, req *galleypb.ListObjectsRequest) (resp *galleypb.ObjectList, err error) {
+	objs, revision, err := readKvsToObjects(s.kvs, buildPath(req.Meta), req.IncludeFields)
 	if err != nil {
 		return nil, err
 	}
 	req.Meta.Revision = revision
-	return &configpb.ObjectList{
+	return &galleypb.ObjectList{
 		Meta:    req.Meta,
 		Objects: objs,
 	}, nil
 }
 
-func (s *GalleyService) ListObjectTypes(ctx context.Context, req *configpb.ListObjectTypesRequest) (resp *configpb.ObjectTypeList, err error) {
+// ListObjectTypes implements a galleypb.Galley method.
+func (s *GalleyService) ListObjectTypes(ctx context.Context, req *galleypb.ListObjectTypesRequest) (resp *galleypb.ObjectTypeList, err error) {
 	var prefix string
-	if req.Meta == nil || (req.Meta.ApiGroup == "" && req.Meta.ApiGroupVersion == "") {
+	if req.Meta == nil || req.Meta.ApiGroup == "" {
 		prefix = "/"
 	} else {
-		prefix = fmt.Sprintf("/%s/%s/", req.Meta.ApiGroup, req.Meta.ApiGroupVersion)
+		prefix = fmt.Sprintf("/%s/", req.Meta.ApiGroup)
 	}
 	keys, _, err := s.kvs.List(prefix, true)
-	resp = &configpb.ObjectTypeList{
+	resp = &galleypb.ObjectTypeList{
 		Meta:        req.Meta,
-		ObjectTypes: make([]*configpb.Meta, 0, len(keys)),
+		ObjectTypes: make([]*galleypb.Meta, 0, len(keys)),
 	}
 	known := map[string]bool{}
 	for _, k := range keys {
@@ -93,7 +97,8 @@ func (s *GalleyService) ListObjectTypes(ctx context.Context, req *configpb.ListO
 	return resp, nil
 }
 
-func (s *GalleyService) CreateObject(ctx context.Context, req *configpb.CreateObjectRequest) (resp *configpb.Object, err error) {
+// CreateObject implements a galleypb.Galley method.
+func (s *GalleyService) CreateObject(ctx context.Context, req *galleypb.ObjectRequest) (resp *galleypb.Object, err error) {
 	value, err := (&jsonpb.Marshaler{}).MarshalToString(req.SourceData)
 	if err != nil {
 		return nil, err
@@ -102,16 +107,18 @@ func (s *GalleyService) CreateObject(ctx context.Context, req *configpb.CreateOb
 	if err != nil {
 		return nil, err
 	}
-	resp = &configpb.Object{Meta: req.Meta, SourceData: req.SourceData}
+	resp = &galleypb.Object{Meta: req.Meta, SourceData: req.SourceData}
 	resp.Meta.Revision = int64(index)
 	return resp, nil
 }
 
-func (s *GalleyService) UpdateObject(ctx context.Context, req *configpb.UpdateObjectRequest) (resp *configpb.Object, err error) {
-	return s.CreateObject(ctx, &configpb.CreateObjectRequest{Meta: req.Meta, SourceData: req.SourceData})
+// UpdateObject implements a galleypb.Galley method.
+func (s *GalleyService) UpdateObject(ctx context.Context, req *galleypb.ObjectRequest) (resp *galleypb.Object, err error) {
+	return s.CreateObject(ctx, req)
 }
 
-func (s *GalleyService) DeleteObject(ctx context.Context, req *configpb.DeleteObjectRequest) (resp *emptypb.Empty, err error) {
+// DeleteObject implements a galleypb.Galley method.
+func (s *GalleyService) DeleteObject(ctx context.Context, req *galleypb.DeleteObjectRequest) (resp *emptypb.Empty, err error) {
 	err = s.kvs.Delete(buildPath(req.Meta))
 	return &emptypb.Empty{}, err
 }

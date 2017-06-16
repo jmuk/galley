@@ -22,19 +22,19 @@ import (
 	"github.com/golang/protobuf/jsonpb"
 	structpb "github.com/golang/protobuf/ptypes/struct"
 
-	configpb "istio.io/api/config/v1"
+	galleypb "istio.io/api/galley/v1"
 	"istio.io/galley/pkg/store"
 )
 
-func buildPath(meta *configpb.Meta) string {
-	var paths = []string{meta.ApiGroup, meta.ApiGroupVersion, meta.ObjectType, meta.ObjectGroup}
+func buildPath(meta *galleypb.Meta) string {
+	var paths = []string{meta.ApiGroup, meta.ObjectType, meta.ObjectTypeVersion, meta.ObjectGroup}
 	if len(meta.Name) != 0 {
 		paths = append(paths, meta.Name)
 	}
 	return "/" + strings.Join(paths, "/")
 }
 
-func pathToMeta(path string) (*configpb.Meta, error) {
+func pathToMeta(path string) (*galleypb.Meta, error) {
 	if path[0] != '/' {
 		return nil, fmt.Errorf("illformed path %s", path)
 	}
@@ -42,22 +42,22 @@ func pathToMeta(path string) (*configpb.Meta, error) {
 	if len(paths) < 5 {
 		return nil, fmt.Errorf("insufficient path components: %s", path)
 	}
-	return &configpb.Meta{
-		ApiGroup:        paths[0],
-		ApiGroupVersion: paths[1],
-		ObjectType:      paths[2],
-		ObjectGroup:     paths[3],
-		Name:            strings.Join(paths[4:], "/"),
+	return &galleypb.Meta{
+		ApiGroup:          paths[0],
+		ObjectType:        paths[1],
+		ObjectTypeVersion: paths[2],
+		ObjectGroup:       paths[3],
+		Name:              strings.Join(paths[4:], "/"),
 	}, nil
 }
 
-func buildObject(data string, meta *configpb.Meta, incl *configpb.ObjectFieldInclude) (obj *configpb.Object, err error) {
+func buildObject(data string, meta *galleypb.Meta, incl *galleypb.ObjectFieldInclude) (obj *galleypb.Object, err error) {
 	src := &structpb.Struct{}
 	err = jsonpb.UnmarshalString(data, src)
 	if err != nil {
 		return nil, err
 	}
-	obj = &configpb.Object{Meta: meta}
+	obj = &galleypb.Object{Meta: meta}
 	if incl != nil && incl.SourceData {
 		obj.SourceData = src
 	}
@@ -67,7 +67,7 @@ func buildObject(data string, meta *configpb.Meta, incl *configpb.ObjectFieldInc
 	return obj, nil
 }
 
-func readKvsToObjects(kvs store.KeyValueStore, prefix string, incl *configpb.ObjectFieldInclude) (objs []*configpb.Object, revision int64, err error) {
+func readKvsToObjects(kvs store.KeyValueStore, prefix string, incl *galleypb.ObjectFieldInclude) (objs []*galleypb.Object, revision int64, err error) {
 	keys, index, err := kvs.List(prefix, true)
 	if err != nil {
 		return nil, 0, err
@@ -78,7 +78,7 @@ func readKvsToObjects(kvs store.KeyValueStore, prefix string, incl *configpb.Obj
 			glog.Warningf("error on key: %v", err)
 			continue
 		}
-		var obj *configpb.Object
+		var obj *galleypb.Object
 		if incl != nil && (incl.SourceData || incl.Data) {
 			value, gindex, found := kvs.Get(k)
 			if !found {
@@ -92,7 +92,7 @@ func readKvsToObjects(kvs store.KeyValueStore, prefix string, incl *configpb.Obj
 			}
 			obj.Meta.Revision = int64(gindex)
 		} else {
-			obj = &configpb.Object{Meta: m}
+			obj = &galleypb.Object{Meta: m}
 			obj.Meta.Revision = int64(index)
 		}
 		objs = append(objs, obj)

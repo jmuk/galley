@@ -16,7 +16,7 @@ go_library(
         "@com_github_golang_protobuf//jsonpb:go_default_library",
         "@com_github_golang_protobuf//ptypes/empty:go_default_library",
         "@com_github_golang_protobuf//ptypes/struct:go_default_library",
-        "@com_github_istio_api//:config/v1",
+        "@com_github_istio_api//:galley/v1",
         "@org_golang_x_net//context:go_default_library",
     ],
 )
