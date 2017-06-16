@@ -15,8 +15,6 @@
 package cmd
 
 import (
-	"time"
-
 	"github.com/spf13/cobra"
 
 	"istio.io/galley/cmd/shared"
@@ -24,10 +22,9 @@ import (
 )
 
 type serverArgs struct {
-	storeURL    string
-	port        uint16
-	gatewayPort uint16
-	interval    uint
+	storeURL string
+	grpcPort uint16
+	restPort uint16
 }
 
 func serverCmd(printf, fatalf shared.FormatFn) *cobra.Command {
@@ -42,10 +39,9 @@ func serverCmd(printf, fatalf shared.FormatFn) *cobra.Command {
 			runServer(sa, printf, fatalf)
 		},
 	}
-	serverCmd.PersistentFlags().Uint16Var(&sa.port, "port", 9096, "Galley API port")
-	serverCmd.PersistentFlags().Uint16Var(&sa.gatewayPort, "gateway-port", 9097, "the port for grpc-gateway to the API")
+	serverCmd.PersistentFlags().Uint16Var(&sa.grpcPort, "port", 9096, "Galley API port for gRPC")
+	serverCmd.PersistentFlags().Uint16Var(&sa.restPort, "rest-port", 9097, "the port JSON/REST gateway to the Galley API")
 	serverCmd.PersistentFlags().StringVar(&sa.storeURL, "store-url", "", "the URL for the backend storage")
-	serverCmd.PersistentFlags().UintVar(&sa.interval, "interval", 5000, "the interval to push updates in msecs")
 	return &serverCmd
 }
 
@@ -54,9 +50,10 @@ func runServer(sa *serverArgs, printf, fatalf shared.FormatFn) {
 	if err != nil {
 		fatalf("Failed to create server: %s", err.Error())
 	}
-	printf("Server started, listening on port %d", sa.port)
+	printf("Server started, listening on port %d", sa.grpcPort)
+	printf("JSON/REST on port %d", sa.restPort)
 	printf("CTL-C to break out of galley")
-	if err = osb.Start(sa.port, sa.gatewayPort, time.Duration(sa.interval)*time.Millisecond); err != nil {
+	if err = osb.Start(sa.grpcPort, sa.restPort); err != nil {
 		fatalf("failed to start the server: %v", err)
 	}
 }

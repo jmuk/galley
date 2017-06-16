@@ -158,13 +158,7 @@ func (rs *redisStore) String() string {
 // Note that the actual index value wouldn't change here, they should be updated
 // when the actual change event arrives to the subscriber.
 func (rs *redisStore) index(increase int) int {
-	if rs.subscriber == nil {
-		return store.IndexNotSupported
-	}
-	rs.subscriber.mu.Lock()
-	idx := rs.subscriber.lastIndex + increase
-	rs.subscriber.mu.Unlock()
-	return idx
+	return store.IndexNotSupported
 }
 
 // Get implements a KeyValueStore method.

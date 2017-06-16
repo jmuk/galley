@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"time"
 
+	"github.com/golang/glog"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 
@@ -56,7 +56,7 @@ func CreateServer(url string) (*Server, error) {
 	return &Server{c, w}, nil
 }
 
-func (s *Server) startGateway(port, gatewayPort uint16) error {
+func (s *Server) startGateway(grpcPort, restPort uint16) error {
 	ctx := context.Background()
 
 	mux := runtime.NewServeMux()
@@ -66,29 +66,29 @@ func (s *Server) startGateway(port, gatewayPort uint16) error {
 		grpc.WithCompressor(grpc.NewGZIPCompressor()),
 		grpc.WithDecompressor(grpc.NewGZIPDecompressor()),
 	}
-	err := configpb.RegisterServiceHandlerFromEndpoint(ctx, mux, fmt.Sprintf("localhost:%d", port), opts)
+	err := configpb.RegisterServiceHandlerFromEndpoint(ctx, mux, fmt.Sprintf("localhost:%d", grpcPort), opts)
 	if err != nil {
 		return err
 	}
 
-	go http.ListenAndServe(fmt.Sprintf(":%d", gatewayPort), mux)
-	return nil
+	return http.ListenAndServe(fmt.Sprintf(":%d", restPort), mux)
 }
 
 // Start runs the server and listen on port.
 // TODO(https://github.com/istio/galley/issues/16)
-func (s *Server) Start(port, gatewayPort uint16, interval time.Duration) error {
-	var listener net.Listener
-	var err error
+func (s *Server) Start(port, restPort uint16) error {
 	// get the network stuff setup
-	if listener, err = net.Listen("tcp", fmt.Sprintf(":%d", port)); err != nil {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
 		return fmt.Errorf("Unable to listen on socket: %v", err)
 	}
 
-	if gatewayPort != 0 {
-		if err := s.startGateway(port, gatewayPort); err != nil {
-			return fmt.Errorf("Failed to start up the gateway: %v", err)
-		}
+	if restPort != 0 {
+		go func() {
+			if err := s.startGateway(port, restPort); err != nil {
+				glog.Errorf("Failed to start up the gateway: %v", err)
+			}
+		}()
 	}
 
 	grpcOptions := []grpc.ServerOption{
