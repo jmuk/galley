@@ -14,7 +14,6 @@
 
 // Package store contains interfaces and implementations
 // of key value storage layer.
-
 package store
 
 import (
@@ -48,7 +47,7 @@ type Reader interface {
 type Writer interface {
 	// Set a value. revision is used for optimistic concurrency.
 	// To opt out of optimistic concurrency use revision = 0
-	Set(key string, value []byte, revision int64) (out_revision int64, err error)
+	Set(key string, value []byte, revision int64) (outRevision int64, err error)
 
 	// Delete a key.
 	Delete(key string) error
@@ -65,10 +64,14 @@ type Watcher interface {
 	// results in an error.
 	Watch(ctx context.Context, key string, revision int64) (<-chan Event, error)
 }
+
+// EventType is the type of a change event.
 type EventType int32
 
 const (
-	PUT EventType = iota // ADD + UPDATE
+	// PUT event indicates an update operation. ADD/UPDATE
+	PUT EventType = iota
+	// DELETE event indicates deletion operation.
 	DELETE
 )
 
@@ -91,6 +94,8 @@ type Locker interface {
 	Lock(key string, ttl time.Duration) (LockedWriter, error)
 }
 
+// LockedWriter defines a writer interface that has a lock on and underlying resource.
+// It is safe to perform write operations for the validity of the lease.
 type LockedWriter interface {
 	Writer
 
