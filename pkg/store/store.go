@@ -28,7 +28,7 @@ import (
 type EventType int32
 
 const (
-	Event_PUT    EventType = 0
+	Event_PUT    EventType = iota
 	Event_DELETE EventType = 1
 )
 
@@ -92,7 +92,7 @@ type KVReader interface {
 	Get(key string) (value []byte, revision int64, found bool)
 
 	// List keys with the prefix.
-	List(key string, recurse bool) (keys []string, revision int, err error)
+	List(key string, recurse bool) (data map[string]string, revision int64, err error)
 }
 
 type Watcher interface {
