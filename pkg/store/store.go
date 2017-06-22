@@ -19,7 +19,6 @@ package store
 import (
 	"fmt"
 	"io"
-	"time"
 
 	"context"
 )
@@ -29,7 +28,6 @@ type KeyValue interface {
 	Reader
 	Writer
 	Watcher
-	Locker
 	fmt.Stringer
 	io.Closer
 }
@@ -82,27 +80,4 @@ type Event struct {
 	Value         []byte    // Value is the Value after the update.
 	PreviousValue []byte    // Previous Value is the value before the update.
 	Revision      int64     // Repository revision at the last update.
-}
-
-// Locker defines a lockable store.
-type Locker interface {
-	// Lock obtains a lock (or lease) a tree rooted at key and
-	// returns a LockedKVWriter. The lock is valid for ttl duration.
-	// All write operations fail after the lock expires.
-	// Before validation requests are sent out, Galley acquires a
-	// timebound lock (lease) on the part of the tree in question.
-	Lock(key string, ttl time.Duration) (LockedWriter, error)
-}
-
-// LockedWriter defines a writer interface that has a lock on and underlying resource.
-// It is safe to perform write operations for the validity of the lease.
-type LockedWriter interface {
-	Writer
-
-	// Renew lease on the lock
-	Renew(ttl time.Duration) error
-
-	// Unlock the writer. All subsequest operations should
-	// fail after unlocking.
-	Unlock() error
 }
