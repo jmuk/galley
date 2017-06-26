@@ -22,7 +22,9 @@ import (
 )
 
 type serverArgs struct {
-	port uint16
+	storeURL string
+	grpcPort uint16
+	restPort uint16
 }
 
 func serverCmd(printf, fatalf shared.FormatFn) *cobra.Command {
@@ -37,16 +39,21 @@ func serverCmd(printf, fatalf shared.FormatFn) *cobra.Command {
 			runServer(sa, printf, fatalf)
 		},
 	}
-	serverCmd.PersistentFlags().Uint16Var(&sa.port, "port", 9096, "Galley API port")
+	serverCmd.PersistentFlags().Uint16Var(&sa.grpcPort, "port", 9096, "Galley API port for gRPC")
+	serverCmd.PersistentFlags().Uint16Var(&sa.restPort, "rest-port", 9097, "the port JSON/REST gateway to the Galley API")
+	serverCmd.PersistentFlags().StringVar(&sa.storeURL, "store-url", "", "the URL for the backend storage")
 	return &serverCmd
 }
 
 func runServer(sa *serverArgs, printf, fatalf shared.FormatFn) {
-	if osb, err := server.CreateServer(); err != nil {
+	osb, err := server.CreateServer(sa.storeURL)
+	if err != nil {
 		fatalf("Failed to create server: %s", err.Error())
-	} else {
-		printf("Server started, listening on port %d", sa.port)
-		printf("CTL-C to break out of galley")
-		osb.Start(sa.port)
+	}
+	printf("Server started, listening on port %d", sa.grpcPort)
+	printf("JSON/REST on port %d", sa.restPort)
+	printf("CTL-C to break out of galley")
+	if err = osb.Start(sa.grpcPort, sa.restPort); err != nil {
+		fatalf("failed to start the server: %v", err)
 	}
 }

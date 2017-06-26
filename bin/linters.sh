@@ -81,7 +81,7 @@ go_metalinter() {
           --enable=goconst\
           --enable=gofmt\
           --enable=goimports\
-          --enable=golint --min-confidence=0 --exclude=.pb.go --exclude=pkg/config/proto/combined.go --exclude="should have a package comment"\
+          --enable=golint --min-confidence=0 --exclude=.pb.gw.go --exclude=.pb.go --exclude=pkg/config/proto/combined.go --exclude="should have a package comment"\
           --enable=ineffassign\
           --enable=interfacer\
           --enable=lll --line-length=160\

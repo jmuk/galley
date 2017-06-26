@@ -4,6 +4,19 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "go_default_library",
-    srcs = ["galley.go"],
+    srcs = [
+        "galley.go",
+        "service.go",
+        "util.go",
+    ],
     visibility = ["//visibility:public"],
+    deps = [
+        "//api:galley/v1",
+        "//pkg/store:go_default_library",
+        "//pkg/store/inventory:go_default_library",
+        "@com_github_golang_protobuf//proto:go_default_library",
+        "@org_golang_google_grpc//codes:go_default_library",
+        "@org_golang_google_grpc//status:go_default_library",
+        "@org_golang_x_net//context:go_default_library",
+    ],
 )
