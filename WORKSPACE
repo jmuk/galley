@@ -20,12 +20,9 @@ load("@org_pubref_rules_protobuf//protobuf:rules.bzl", "proto_repositories")
 
 proto_repositories()
 
-load("@org_pubref_rules_protobuf//gogo:rules.bzl", "gogo_proto_repositories")
 load("@org_pubref_rules_protobuf//cpp:rules.bzl", "cpp_proto_repositories")
 
 cpp_proto_repositories()
-
-gogo_proto_repositories()
 
 new_go_repository(
     name = "com_github_golang_glog",
@@ -46,12 +43,6 @@ new_go_repository(
 )
 
 new_go_repository(
-    name = "com_github_geeknoid_gogo_protobuf",
-    commit = "210910de191e1cdc05d0b6881c575d9a77e2526f",  # May 1, 2017 (no releases)
-    importpath = "github.com/geeknoid/protobuf",
-)
-
-new_go_repository(
     name = "in_gopkg_yaml_v2",
     commit = "14227de293ca979cf205cd88769fe71ed96a97e2",  # Jan 24, 2017 (no releases)
     importpath = "gopkg.in/yaml.v2",
@@ -59,9 +50,13 @@ new_go_repository(
 
 new_go_repository(
     name = "com_github_golang_protobuf",
-    commit = "8ee79997227bf9b34611aee7946ae64735e6fd93",  # Nov 16, 2016 (no releases)
+    commit = "e325f446bebc2998605911c0a2650d9920361d4a",  # Jun 13, 2017 (no releases)
     importpath = "github.com/golang/protobuf",
 )
+
+load("@org_pubref_rules_protobuf//grpc_gateway:rules.bzl", "grpc_gateway_proto_repositories")
+
+grpc_gateway_proto_repositories()
 
 GOOGLEAPIS_BUILD_FILE = """
 package(default_visibility = ["//visibility:public"])
@@ -69,18 +64,16 @@ package(default_visibility = ["//visibility:public"])
 load("@io_bazel_rules_go//go:def.bzl", "go_prefix")
 go_prefix("github.com/googleapis/googleapis")
 
-load("@org_pubref_rules_protobuf//gogo:rules.bzl", "gogoslick_proto_library")
+load("@org_pubref_rules_protobuf//go:rules.bzl", "go_proto_library")
 
-gogoslick_proto_library(
-    name = "google/rpc",
+go_proto_library(
+    name = "google/api/annotations",
     protos = [
-        "google/rpc/code.proto",
-        "google/rpc/error_details.proto",
-        "google/rpc/status.proto",
+        "google/api/annotations.proto",
+        "google/api/http.proto",
     ],
     importmap = {
-        "google/protobuf/any.proto": "github.com/gogo/protobuf/types",
-        "google/protobuf/duration.proto": "github.com/gogo/protobuf/types",
+        "google/protobuf/descriptor.proto": "github.com/golang/protobuf/protoc-gen-go/descriptor",
     },
     imports = [
         "../../external/com_github_google_protobuf/src",
@@ -89,7 +82,31 @@ gogoslick_proto_library(
         "@com_github_google_protobuf//:well_known_protos",
     ],
     deps = [
-        "@com_github_gogo_protobuf//types:go_default_library",
+        "@com_github_golang_protobuf//protoc-gen-go/descriptor:go_default_library",
+    ],
+    verbose = 0,
+)
+
+go_proto_library(
+    name = "google/rpc",
+    protos = [
+        "google/rpc/code.proto",
+        "google/rpc/error_details.proto",
+        "google/rpc/status.proto",
+    ],
+    importmap = {
+        "google/protobuf/any.proto": "github.com/golang/protobuf/ptypes/any",
+        "google/protobuf/duration.proto": "github.com/golang/protobuf/ptypes/duration",
+    },
+    imports = [
+        "../../external/com_github_google_protobuf/src",
+    ],
+    inputs = [
+        "@com_github_google_protobuf//:well_known_protos",
+    ],
+    deps = [
+        "@com_github_golang_protobuf//ptypes/any:go_default_library",
+        "@com_github_golang_protobuf//ptypes/duration:go_default_library",
     ],
     verbose = 0,
 )
@@ -105,6 +122,14 @@ cc_proto_library(
         "../../external/com_github_google_protobuf/src",
     ],
     verbose = 0,
+)
+
+filegroup(
+    name = "annotations_proto",
+    srcs = [
+        "google/api/annotations.proto",
+        "google/api/http.proto",
+    ],
 )
 
 filegroup(
@@ -194,7 +219,7 @@ new_git_or_local_repository(
     path = "../api",
     remote = "https://github.com/istio/api.git",
     # Change this to True to use ../api directory
-    use_local = False,
+    use_local = True,
 )
 
 new_http_archive(
@@ -381,6 +406,12 @@ new_go_repository(
     name = "com_github_PuerkitoBio_purell",
     commit = "0bcb03f4b4d0a9428594752bd2a3b9aa0a9d4bd4",  # Nov 14, 2016 (v1.1.0)
     importpath = "github.com/PuerkitoBio/purell",
+)
+
+new_go_repository(
+    name = "org_golang_x_net",
+    commit = "feeb485667d1fdabe727840fe00adc22431bc86e",  # May 2, 2017 (no releases)
+    importpath = "golang.org/x/net",
 )
 
 new_go_repository(

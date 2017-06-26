@@ -4,5 +4,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "go_default_library",
-    srcs = ["galley.go"],
+    srcs = [
+        "galley.go",
+        "service.go",
+        "util.go",
+        "watcher.go",
+    ],
+    deps = [
+        "//pkg/store:go_default_library",
+        "//pkg/store/inventory:go_default_library",
+        "@com_github_golang_protobuf//proto:go_default_library",
+        "@com_github_istio_api//:galley/v1",
+        "@org_golang_x_net//context:go_default_library",
+    ],
 )
