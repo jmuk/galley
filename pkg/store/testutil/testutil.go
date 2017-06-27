@@ -90,7 +90,7 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 					t.Errorf("Unexpected error for %s: %v", key, err)
 				}
 				val, _, found = s.Get(key)
-				if !found || bytes.Compare(kc, val) != 0 {
+				if !found || !bytes.Equal(kc, val) {
 					t.Errorf("Got %s\nWant %s", val, kc)
 				}
 			}
@@ -163,10 +163,10 @@ func compareEvents(actual []store.Event, expected []store.Event) bool {
 	}
 	for i, aev := range actual {
 		eev := expected[i]
-		if aev.Type != eev.Type || aev.Key != eev.Key || bytes.Compare(aev.Value, eev.Value) != 0 {
+		if aev.Type != eev.Type || aev.Key != eev.Key || !bytes.Equal(aev.Value, eev.Value) {
 			return false
 		}
-		if len(aev.PreviousValue) != 0 && bytes.Compare(aev.PreviousValue, eev.PreviousValue) != 0 {
+		if len(aev.PreviousValue) != 0 && !bytes.Equal(aev.PreviousValue, eev.PreviousValue) {
 			return false
 		}
 	}
