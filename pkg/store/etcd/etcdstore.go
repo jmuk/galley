@@ -26,6 +26,9 @@ import (
 	"istio.io/galley/pkg/store"
 )
 
+// The size of the buffer for the channel which Watch returns.
+const watchBufSize int = 10
+
 // KeyValue implements store.KeyValue for etcd.
 type KeyValue struct {
 	client *clientv3.Client
@@ -106,7 +109,7 @@ func (es *KeyValue) Delete(key string) error {
 
 // Watch implements a store.Watcher method.
 func (es *KeyValue) Watch(ctx context.Context, key string, revision int64) (<-chan store.Event, error) {
-	c := make(chan store.Event)
+	c := make(chan store.Event, watchBufSize)
 	go func() {
 		for resp := range es.client.Watch(ctx, key, clientv3.WithPrefix(), clientv3.WithRev(revision)) {
 			for _, ev := range resp.Events {
