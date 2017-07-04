@@ -54,6 +54,10 @@ func TestEtcdStore(t *testing.T) {
 	testutil.RunStoreTest(t, testManagerBuilder)
 }
 
+func TestEtcdOptimisticConcurrency(t *testing.T) {
+	testutil.RunOptimisticConcurrency(t, testManagerBuilder)
+}
+
 func TestEtcdWatch(t *testing.T) {
 	testutil.RunWatcherTest(t, testManagerBuilder)
 }
