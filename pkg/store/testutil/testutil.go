@@ -74,14 +74,13 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 		s := km.kv
 		t.Run(tt.desc, func(t1 *testing.T) {
 			var rv int64
-			var found bool
+			var err error
 			badkey := "a/b"
-			_, rv, found = s.Get(badkey)
-			if found {
+			_, rv, err = s.Get(badkey)
+			if err == nil {
 				t.Errorf("Unexpectedly found %s", badkey)
 			}
 			var val []byte
-			var err error
 			// create keys
 			for _, key := range tt.keys {
 				kc := []byte(key)
@@ -89,9 +88,9 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 				if err != nil {
 					t.Errorf("Unexpected error for %s: %v", key, err)
 				}
-				val, _, found = s.Get(key)
-				if !found || !bytes.Equal(kc, val) {
-					t.Errorf("Got %s\nWant %s", val, kc)
+				val, _, err = s.Get(key)
+				if err != nil || !bytes.Equal(kc, val) {
+					t.Errorf("Got %s\nWant %s\nError: %v", val, kc, err)
 				}
 			}
 
@@ -139,13 +138,13 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 				t.Errorf("Got %s\nWant %s\n", k, tt.listKeys)
 			}
 
-			err = s.Delete(k[1])
+			_, err = s.Delete(k[1])
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			_, _, found = s.Get(k[1])
-			if found {
+			_, _, err = s.Get(k[1])
+			if err == nil {
 				t.Errorf("Unexpectedly found %s", k[1])
 			}
 		})
@@ -153,6 +152,116 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 			t.Errorf("failure on cleanup: %v", err)
 		}
 	}
+}
+
+// RunOptimisticConcurrency runs optimistic concurrency behavior
+// on set
+func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, error)) {
+	for _, tt := range []struct {
+		desc      string
+		operation func(kv store.KeyValue, keyPrefix string) (int64, error)
+		ok        bool
+		cleanup   func(kv store.KeyValue, keyPrefix string) error
+	}{
+		{
+			"set foo",
+			func(kv store.KeyValue, keyPrefix string) (int64, error) {
+				return kv.Set(keyPrefix+"foo", []byte("foobar"), 0)
+			},
+			false,
+			nil,
+		},
+		{
+			"set bar",
+			func(kv store.KeyValue, keyPrefix string) (int64, error) {
+				return kv.Set(keyPrefix+"bar", []byte("bar"), 0)
+			},
+			false,
+			func(kv store.KeyValue, keyPrefix string) error {
+				_, err := kv.Delete(keyPrefix + "bar")
+				return err
+			},
+		},
+		{
+			"delete foo",
+			func(kv store.KeyValue, keyPrefix string) (int64, error) {
+				return kv.Delete(keyPrefix + "foo")
+			},
+			false,
+			nil,
+		},
+		{
+			"get foo",
+			func(kv store.KeyValue, keyPrefix string) (int64, error) {
+				_, revision, err := kv.Get(keyPrefix + "foo")
+				return revision, err
+			},
+			true,
+			nil,
+		},
+	} {
+		t.Run(tt.desc, func(t1 *testing.T) {
+			keyPrefix := "/" + t1.Name() + "/"
+			km, err := newManagerFn()
+			if err != nil {
+				t.Fatalf("failed to initialize: %v", err)
+			}
+			s := km.kv
+			defer func() {
+				if _, err := s.Delete(keyPrefix + "foo"); err != nil {
+					t1.Errorf("failure on cleanup: deletion of foo: %v", err)
+				}
+				if tt.cleanup != nil {
+					if err := tt.cleanup(s, keyPrefix); err != nil {
+						t1.Errorf("failure on cleanup: per-operation cleanup: %v", err)
+					}
+				}
+				if err := km.cleanup(); err != nil {
+					t1.Errorf("failure on cleanup: %v", err)
+				}
+			}()
+			_, err = s.Set(keyPrefix+"foo", []byte("foo"), 0)
+			if err != nil {
+				t1.Fatalf("failed to set: %v", err)
+			}
+			v, revision, err := s.Get(keyPrefix + "foo")
+			if err != nil {
+				t1.Fatalf("failed to get: %v", err)
+			}
+			if string(v) != "foo" {
+				t1.Fatalf("Got %s\nWant foo", v)
+			}
+			revision2, err := tt.operation(s, keyPrefix)
+			if err != nil {
+				t1.Fatalf("failure on other operation: %v", err)
+			}
+			_, err = s.Set(keyPrefix+"foo", []byte("bar"), revision)
+			if tt.ok {
+				if err != nil {
+					t1.Errorf("expected to succeed, but failed: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t1.Fatalf("expected to fail but succeeded to set with revision %d (revision2: %d)", revision, revision2)
+			}
+			if _, ok := err.(*store.RevisionMismatchError); !ok {
+				t1.Fatalf("the error %v isn't expected", err)
+			}
+			_, err = s.Set(keyPrefix+"foo", []byte("bar"), revision2)
+			if err != nil {
+				t1.Fatalf("failed to set foo: %v", err)
+			}
+			v, _, err = s.Get(keyPrefix + "foo")
+			if err != nil {
+				t1.Fatalf("failed to get foo: %v", err)
+			}
+			if string(v) != "bar" {
+				t1.Fatalf("Got %s\nWant bar", v)
+			}
+		})
+	}
+
 }
 
 func compareEvents(actual []store.Event, expected []store.Event) bool {
@@ -229,7 +338,7 @@ func RunWatcherTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 	if err != nil {
 		t.Errorf("failed to set: %v", err)
 	}
-	err = s.Delete("/test/k2")
+	_, err = s.Delete("/test/k2")
 	if err != nil {
 		t.Errorf("failed to set: %v", err)
 	}

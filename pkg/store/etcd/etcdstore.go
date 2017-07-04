@@ -16,7 +16,6 @@ package etcd
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"strings"
 
@@ -29,39 +28,53 @@ import (
 // The size of the buffer for the channel which Watch returns.
 const watchBufSize int = 10
 
+// globalRevisionKey is the key to track the storage revision.
+// This is used for Set() method to ensure that no other operations are
+// made outside.
+const globalRevisionKey string = "global_revision"
+
 // KeyValue implements store.KeyValue for etcd.
 type KeyValue struct {
 	client *clientv3.Client
 	u      *url.URL
 }
 
-// String implements a fmt.Stringer method.
+// String implements fmt.Stringer interface.
 func (es *KeyValue) String() string {
 	return es.u.String()
 }
 
-// Close implements an io.Closer method.
+// Close implements io.Closer interface.
 func (es *KeyValue) Close() error {
 	return es.client.Close()
 }
 
-// Get implements a store.Reader method.
-func (es *KeyValue) Get(key string) (value []byte, revision int64, found bool) {
+func ensureKey(key string) string {
+	if !strings.HasPrefix(key, "/") {
+		return "/" + key
+	}
+	return key
+}
+
+// Get implements store.Reader interface.
+func (es *KeyValue) Get(key string) (value []byte, revision int64, err error) {
+	key = ensureKey(key)
 	resp, err := es.client.Get(es.client.Ctx(), key)
 	if err != nil {
-		return value, 0, false
+		return nil, 0, err
 	}
 	revision = resp.Header.Revision
 	for _, kvs := range resp.Kvs {
 		if string(kvs.Key) == key {
-			return kvs.Value, revision, true
+			return kvs.Value, revision, nil
 		}
 	}
-	return value, revision, false
+	return nil, revision, store.ErrNotFound
 }
 
-// List implements a store.Reader method.
+// List implements store.Reader interface.
 func (es *KeyValue) List(prefix string) (data map[string]string, revision int64, err error) {
+	prefix = ensureKey(prefix)
 	if !strings.HasSuffix(prefix, "/") {
 		prefix = prefix + "/"
 	}
@@ -76,39 +89,48 @@ func (es *KeyValue) List(prefix string) (data map[string]string, revision int64,
 	return data, resp.Header.Revision, nil
 }
 
-// Set implements a store.Writer method.
+// Set implements store.Writer interface.
 func (es *KeyValue) Set(key string, value []byte, revision int64) (outRevision int64, err error) {
+	key = ensureKey(key)
+	var resp *clientv3.TxnResponse
+	txn := es.client.Txn(es.client.Ctx())
 	if revision == 0 {
-		var resp *clientv3.PutResponse
-		resp, err = es.client.Put(es.client.Ctx(), key, string(value))
-		if err != nil {
-			return -1, err
-		}
-		outRevision = resp.Header.Revision
+		resp, err = txn.Then(
+			clientv3.OpPut(key, string(value)),
+			clientv3.OpPut(globalRevisionKey, ""),
+		).Commit()
 	} else {
-		var resp *clientv3.TxnResponse
 		resp, err = es.client.Txn(es.client.Ctx()).If(
-			clientv3.Compare(clientv3.ModRevision(key), "<", revision+1)).Then(
+			clientv3.Compare(clientv3.ModRevision(globalRevisionKey), "<", revision+1)).Then(
 			clientv3.OpPut(key, string(value))).Commit()
-		if err != nil {
-			return -1, err
-		}
-		outRevision = resp.Header.Revision
-		if !resp.Succeeded {
-			return outRevision, fmt.Errorf("failed to set: %s is newer than the expected revision %d", key, revision)
+	}
+	if err != nil {
+		return -1, err
+	}
+	outRevision = resp.Header.Revision
+	if !resp.Succeeded {
+		return outRevision, &store.RevisionMismatchError{
+			Key:              key,
+			ExpectedRevision: revision,
+			ActualRevision:   outRevision,
 		}
 	}
 	return outRevision, nil
 }
 
-// Delete implements a store.Writer method.
-func (es *KeyValue) Delete(key string) error {
-	_, err := es.client.Delete(es.client.Ctx(), key)
-	return err
+// Delete implements store.Writer interface.
+func (es *KeyValue) Delete(key string) (int64, error) {
+	key = ensureKey(key)
+	resp, err := es.client.Txn(es.client.Ctx()).Then(
+		clientv3.OpPut(globalRevisionKey, ""),
+		clientv3.OpDelete(key),
+	).Commit()
+	return resp.Header.Revision, err
 }
 
-// Watch implements a store.Watcher method.
+// Watch implements store.Watcher interface.
 func (es *KeyValue) Watch(ctx context.Context, key string, revision int64) (<-chan store.Event, error) {
+	key = ensureKey(key)
 	c := make(chan store.Event, watchBufSize)
 	go func() {
 		for resp := range es.client.Watch(ctx, key, clientv3.WithPrefix(), clientv3.WithRev(revision)) {
