@@ -100,7 +100,10 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 				t.Errorf("Unexpected succeed of Set")
 			}
 			var d1 []byte
-			d1, rv, _ = s.Get(tt.keys[0])
+			d1, rv, err = s.Get(tt.keys[0])
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
 			rv, err = s.Set(tt.keys[0], []byte("new data"), rv)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
@@ -208,15 +211,15 @@ func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, e
 			}
 			s := km.kv
 			defer func() {
-				if _, err := s.Delete(keyPrefix + "foo"); err != nil {
+				if _, err = s.Delete(keyPrefix + "foo"); err != nil {
 					t1.Errorf("failure on cleanup: deletion of foo: %v", err)
 				}
 				if tt.cleanup != nil {
-					if err := tt.cleanup(s, keyPrefix); err != nil {
+					if err = tt.cleanup(s, keyPrefix); err != nil {
 						t1.Errorf("failure on cleanup: per-operation cleanup: %v", err)
 					}
 				}
-				if err := km.cleanup(); err != nil {
+				if err = km.cleanup(); err != nil {
 					t1.Errorf("failure on cleanup: %v", err)
 				}
 			}()
