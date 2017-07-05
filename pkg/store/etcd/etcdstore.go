@@ -26,6 +26,8 @@ import (
 )
 
 // The size of the buffer for the channel which Watch returns.
+// TODO: remove this constant and introduce some smarter approach
+// to determine the buffer size nicely (or allow customization?)
 const watchBufSize int = 10
 
 // globalRevisionKey is the key to track the storage revision.
@@ -33,19 +35,19 @@ const watchBufSize int = 10
 // made outside.
 const globalRevisionKey string = "global_revision"
 
-// KeyValue implements store.KeyValue for etcd.
-type KeyValue struct {
+// Store implements store.Store for etcd.
+type Store struct {
 	client *clientv3.Client
 	u      *url.URL
 }
 
 // String implements fmt.Stringer interface.
-func (es *KeyValue) String() string {
+func (es *Store) String() string {
 	return es.u.String()
 }
 
 // Close implements io.Closer interface.
-func (es *KeyValue) Close() error {
+func (es *Store) Close() error {
 	return es.client.Close()
 }
 
@@ -57,13 +59,13 @@ func ensureKey(key string) string {
 }
 
 // Get implements store.Reader interface.
-func (es *KeyValue) Get(key string) (value []byte, revision int64, err error) {
+func (es *Store) Get(key string) ([]byte, int64, error) {
 	key = ensureKey(key)
 	resp, err := es.client.Get(es.client.Ctx(), key)
 	if err != nil {
 		return nil, 0, err
 	}
-	revision = resp.Header.Revision
+	revision := resp.Header.Revision
 	for _, kvs := range resp.Kvs {
 		if string(kvs.Key) == key {
 			return kvs.Value, revision, nil
@@ -73,7 +75,7 @@ func (es *KeyValue) Get(key string) (value []byte, revision int64, err error) {
 }
 
 // List implements store.Reader interface.
-func (es *KeyValue) List(prefix string) (data map[string]string, revision int64, err error) {
+func (es *Store) List(prefix string) (map[string]string, int64, error) {
 	prefix = ensureKey(prefix)
 	if !strings.HasSuffix(prefix, "/") {
 		prefix = prefix + "/"
@@ -82,7 +84,7 @@ func (es *KeyValue) List(prefix string) (data map[string]string, revision int64,
 	if err != nil {
 		return nil, 0, err
 	}
-	data = map[string]string{}
+	data := map[string]string{}
 	for _, kvs := range resp.Kvs {
 		data[string(kvs.Key)] = string(kvs.Value)
 	}
@@ -90,11 +92,12 @@ func (es *KeyValue) List(prefix string) (data map[string]string, revision int64,
 }
 
 // Set implements store.Writer interface.
-func (es *KeyValue) Set(key string, value []byte, revision int64) (outRevision int64, err error) {
+func (es *Store) Set(key string, value []byte, revision int64) (int64, error) {
+	var err error
 	key = ensureKey(key)
 	var resp *clientv3.TxnResponse
 	txn := es.client.Txn(es.client.Ctx())
-	if revision == 0 {
+	if revision < 0 {
 		resp, err = txn.Then(
 			clientv3.OpPut(key, string(value)),
 			clientv3.OpPut(globalRevisionKey, ""),
@@ -109,7 +112,7 @@ func (es *KeyValue) Set(key string, value []byte, revision int64) (outRevision i
 	if err != nil {
 		return -1, err
 	}
-	outRevision = resp.Header.Revision
+	outRevision := resp.Header.Revision
 	if !resp.Succeeded {
 		return outRevision, &store.RevisionMismatchError{
 			Key:              key,
@@ -121,7 +124,7 @@ func (es *KeyValue) Set(key string, value []byte, revision int64) (outRevision i
 }
 
 // Delete implements store.Writer interface.
-func (es *KeyValue) Delete(key string) (int64, error) {
+func (es *Store) Delete(key string) (int64, error) {
 	key = ensureKey(key)
 	resp, err := es.client.Txn(es.client.Ctx()).Then(
 		clientv3.OpPut(globalRevisionKey, ""),
@@ -131,7 +134,7 @@ func (es *KeyValue) Delete(key string) (int64, error) {
 }
 
 // Watch implements store.Watcher interface.
-func (es *KeyValue) Watch(ctx context.Context, key string, revision int64) (<-chan store.Event, error) {
+func (es *Store) Watch(ctx context.Context, key string, revision int64) (<-chan store.Event, error) {
 	key = ensureKey(key)
 	c := make(chan store.Event, watchBufSize)
 	go func() {
@@ -158,7 +161,7 @@ func (es *KeyValue) Watch(ctx context.Context, key string, revision int64) (<-ch
 	return c, nil
 }
 
-func newKeyValue(u *url.URL) (store.KeyValue, error) {
+func newStore(u *url.URL) (store.Store, error) {
 	origScheme := u.Scheme
 	u.Scheme = "http"
 	cfg := clientv3.Config{Endpoints: []string{u.String()}}
@@ -173,10 +176,10 @@ func newKeyValue(u *url.URL) (store.KeyValue, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &KeyValue{client, u}, nil
+	return &Store{client, u}, nil
 }
 
 // Register registers etcd scheme as the store backend.
 func Register(m map[string]store.Builder) {
-	m["etcd"] = newKeyValue
+	m["etcd"] = newStore
 }

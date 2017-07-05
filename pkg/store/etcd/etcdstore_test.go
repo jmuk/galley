@@ -43,7 +43,7 @@ func TestMain(m *testing.M) {
 }
 
 func testManagerBuilder() (*testutil.TestManager, error) {
-	es, err := newKeyValue(u)
+	es, err := newStore(u)
 	if err != nil {
 		return nil, err
 	}

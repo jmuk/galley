@@ -23,7 +23,7 @@ import (
 )
 
 func testingRegister(m map[string]Builder) {
-	m["test"] = func(u *url.URL) (KeyValue, error) {
+	m["test"] = func(u *url.URL) (Store, error) {
 		if u.Host == "" {
 			return nil, nil
 		}
@@ -44,7 +44,7 @@ func TestNewStore(t *testing.T) {
 		{"test://foo/bar", errors.New("foo is not supported")},
 	} {
 		t.Run(tt.url, func(t *testing.T) {
-			_, err := r.NewKeyValue(tt.url)
+			_, err := r.NewStore(tt.url)
 			if err == tt.err {
 				return
 			}

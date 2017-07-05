@@ -19,8 +19,8 @@ import (
 	"net/url"
 )
 
-// Builder is the type to build a new KeyValue from a URL.
-type Builder func(*url.URL) (KeyValue, error)
+// Builder is the type to build a new Store from a URL.
+type Builder func(*url.URL) (Store, error)
 
 // RegisterFunc is the function to register a builder to a URL scheme.
 type RegisterFunc func(m map[string]Builder)
@@ -39,8 +39,8 @@ func NewRegistrar(funcs []RegisterFunc) *Registrar {
 	return r
 }
 
-// NewKeyValue creates a KeyValue to the given URL string.
-func (r *Registrar) NewKeyValue(ustr string) (KeyValue, error) {
+// NewStore creates a Store to the given URL string.
+func (r *Registrar) NewStore(ustr string) (Store, error) {
 	u, err := url.Parse(ustr)
 	if err != nil {
 		return nil, err

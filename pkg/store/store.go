@@ -22,10 +22,23 @@ import (
 	"io"
 )
 
-// KeyValue provides a generic interface to a key value store.
-type KeyValue interface {
-	Reader
-	Writer
+// Store provides a generic interface to a key value store.
+type Store interface {
+	// Get value at a key. Returns non-nil error if not found.
+	Get(key string) (value []byte, revision int64, err error)
+
+	// List keys with the key prefix. Reply includes values.
+	List(keyPrefix string) (data map[string]string, revision int64, err error)
+
+	// Set a value. revision is used for optimistic concurrency.
+	// When revision is negative, it sets the value without checking.
+	// When the error happens due to the failure of optimistic concurrency,
+	// it should return RevisionMismatchError.
+	Set(key string, value []byte, revision int64) (outRevision int64, err error)
+
+	// Delete a key.
+	Delete(key string) (outRevision int64, err error)
+
 	Watcher
 	fmt.Stringer
 	io.Closer
@@ -48,27 +61,6 @@ func (err *RevisionMismatchError) Error() string {
 	return fmt.Sprintf(
 		"failed to set %s: revision %d is older than the actual revision %d",
 		err.Key, err.ExpectedRevision, err.ActualRevision)
-}
-
-// Reader defines read operations of a key-value store.
-type Reader interface {
-	// Get value at a key. Returns non-nil error if not found.
-	Get(key string) (value []byte, revision int64, err error)
-
-	// List keys with the key prefix. Reply includes values.
-	List(keyPrefix string) (data map[string]string, revision int64, err error)
-}
-
-// Writer defines write operations of a key-value store.
-type Writer interface {
-	// Set a value. revision is used for optimistic concurrency.
-	// To opt out of optimistic concurrency use revision = 0.
-	// When the error happens due to the failure of optimistic concurrency,
-	// it should return RevisionMismatchError.
-	Set(key string, value []byte, revision int64) (outRevision int64, err error)
-
-	// Delete a key.
-	Delete(key string) (outRevision int64, err error)
 }
 
 // Watcher defines a wachable store.

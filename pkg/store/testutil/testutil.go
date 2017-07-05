@@ -27,12 +27,12 @@ import (
 
 // TestManager manages the data to run test cases.
 type TestManager struct {
-	kv          store.KeyValue
+	store       store.Store
 	cleanupFunc func()
 }
 
 func (k *TestManager) cleanup() error {
-	err := k.kv.Close()
+	err := k.store.Close()
 	if k.cleanupFunc != nil {
 		k.cleanupFunc()
 	}
@@ -40,11 +40,11 @@ func (k *TestManager) cleanup() error {
 }
 
 // NewTestManager creates a new StoreTestManager.
-func NewTestManager(s store.KeyValue, cleanup func()) *TestManager {
+func NewTestManager(s store.Store, cleanup func()) *TestManager {
 	return &TestManager{s, cleanup}
 }
 
-// RunStoreTest runs the test cases for a KeyValueStore implementation.
+// RunStoreTest runs the test cases for a Store implementation.
 func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 	GOODKEYS := []string{
 		"/scopes/global/adapters",
@@ -71,7 +71,7 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 		if err != nil {
 			t.Fatalf("failed to create a new manager: %v", err)
 		}
-		s := km.kv
+		s := km.store
 		t.Run(tt.desc, func(t1 *testing.T) {
 			var rv int64
 			var err error
@@ -84,7 +84,7 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 			// create keys
 			for _, key := range tt.keys {
 				kc := []byte(key)
-				_, err = s.Set(key, kc, 0)
+				_, err = s.Set(key, kc, -1)
 				if err != nil {
 					t.Errorf("Unexpected error for %s: %v", key, err)
 				}
@@ -162,41 +162,41 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, error)) {
 	for _, tt := range []struct {
 		desc      string
-		operation func(kv store.KeyValue, keyPrefix string) (int64, error)
+		operation func(s store.Store, keyPrefix string) (int64, error)
 		ok        bool
-		cleanup   func(kv store.KeyValue, keyPrefix string) error
+		cleanup   func(s store.Store, keyPrefix string) error
 	}{
 		{
 			"set foo",
-			func(kv store.KeyValue, keyPrefix string) (int64, error) {
-				return kv.Set(keyPrefix+"foo", []byte("foobar"), 0)
+			func(s store.Store, keyPrefix string) (int64, error) {
+				return s.Set(keyPrefix+"foo", []byte("foobar"), -1)
 			},
 			false,
 			nil,
 		},
 		{
 			"set bar",
-			func(kv store.KeyValue, keyPrefix string) (int64, error) {
-				return kv.Set(keyPrefix+"bar", []byte("bar"), 0)
+			func(s store.Store, keyPrefix string) (int64, error) {
+				return s.Set(keyPrefix+"bar", []byte("bar"), -1)
 			},
 			false,
-			func(kv store.KeyValue, keyPrefix string) error {
-				_, err := kv.Delete(keyPrefix + "bar")
+			func(s store.Store, keyPrefix string) error {
+				_, err := s.Delete(keyPrefix + "bar")
 				return err
 			},
 		},
 		{
 			"delete foo",
-			func(kv store.KeyValue, keyPrefix string) (int64, error) {
-				return kv.Delete(keyPrefix + "foo")
+			func(s store.Store, keyPrefix string) (int64, error) {
+				return s.Delete(keyPrefix + "foo")
 			},
 			false,
 			nil,
 		},
 		{
 			"get foo",
-			func(kv store.KeyValue, keyPrefix string) (int64, error) {
-				_, revision, err := kv.Get(keyPrefix + "foo")
+			func(s store.Store, keyPrefix string) (int64, error) {
+				_, revision, err := s.Get(keyPrefix + "foo")
 				return revision, err
 			},
 			true,
@@ -209,7 +209,7 @@ func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, e
 			if err != nil {
 				t.Fatalf("failed to initialize: %v", err)
 			}
-			s := km.kv
+			s := km.store
 			defer func() {
 				if _, err = s.Delete(keyPrefix + "foo"); err != nil {
 					t1.Errorf("failure on cleanup: deletion of foo: %v", err)
@@ -223,7 +223,7 @@ func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, e
 					t1.Errorf("failure on cleanup: %v", err)
 				}
 			}()
-			_, err = s.Set(keyPrefix+"foo", []byte("foo"), 0)
+			_, err = s.Set(keyPrefix+"foo", []byte("foo"), -1)
 			if err != nil {
 				t1.Fatalf("failed to set: %v", err)
 			}
@@ -291,7 +291,7 @@ func RunWatcherTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 	if err != nil {
 		t.Fatalf("failed to create a new manager: %v", err)
 	}
-	s := km.kv
+	s := km.store
 	_, rv, err := s.List("")
 	if err != nil {
 		t.Fatalf("failed to get the revision: %v", err)
