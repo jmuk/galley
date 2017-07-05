@@ -36,6 +36,18 @@ new_go_repository(
     importpath = "google.golang.org/grpc",
 )
 
+new_go_repository(
+    name = "org_golang_x_net",
+    commit = "fe686d45ea04bc1bd4eff6a52865ce8757320325",  # Jun 18, 2017 (no release)
+    importpath = "golang.org/x/net",
+)
+
+new_go_repository(
+    name = "org_golang_google_grpc",
+    commit = "d2e1b51f33ff8c5e4a15560ff049d200e83726c5",  # Apr 18, 2017 (v1.3.0)
+    importpath = "google.golang.org/grpc",
+)
+
 git_repository(
     name = "io_bazel_rules_docker",
     remote = "https://github.com/bazelbuild/rules_docker.git",
