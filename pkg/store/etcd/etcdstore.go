@@ -102,7 +102,9 @@ func (es *KeyValue) Set(key string, value []byte, revision int64) (outRevision i
 	} else {
 		resp, err = es.client.Txn(es.client.Ctx()).If(
 			clientv3.Compare(clientv3.ModRevision(globalRevisionKey), "<", revision+1)).Then(
-			clientv3.OpPut(key, string(value))).Commit()
+			clientv3.OpPut(key, string(value)),
+			clientv3.OpPut(globalRevisionKey, ""),
+		).Commit()
 	}
 	if err != nil {
 		return -1, err
