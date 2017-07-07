@@ -51,7 +51,7 @@ func (es *Store) Close() error {
 	return es.client.Close()
 }
 
-func ensureKey(key string) string {
+func normalizeKey(key string) string {
 	if !strings.HasPrefix(key, "/") {
 		return "/" + key
 	}
@@ -60,7 +60,7 @@ func ensureKey(key string) string {
 
 // Get implements store.Reader interface.
 func (es *Store) Get(key string) ([]byte, int64, error) {
-	key = ensureKey(key)
+	key = normalizeKey(key)
 	resp, err := es.client.Get(es.client.Ctx(), key)
 	if err != nil {
 		return nil, 0, err
@@ -76,7 +76,7 @@ func (es *Store) Get(key string) ([]byte, int64, error) {
 
 // List implements store.Reader interface.
 func (es *Store) List(prefix string) (map[string]string, int64, error) {
-	prefix = ensureKey(prefix)
+	prefix = normalizeKey(prefix)
 	if !strings.HasSuffix(prefix, "/") {
 		prefix = prefix + "/"
 	}
@@ -94,7 +94,7 @@ func (es *Store) List(prefix string) (map[string]string, int64, error) {
 // Set implements store.Writer interface.
 func (es *Store) Set(key string, value []byte, revision int64) (int64, error) {
 	var err error
-	key = ensureKey(key)
+	key = normalizeKey(key)
 	var resp *clientv3.TxnResponse
 	txn := es.client.Txn(es.client.Ctx())
 	if revision < 0 {
@@ -125,7 +125,7 @@ func (es *Store) Set(key string, value []byte, revision int64) (int64, error) {
 
 // Delete implements store.Writer interface.
 func (es *Store) Delete(key string) (int64, error) {
-	key = ensureKey(key)
+	key = normalizeKey(key)
 	resp, err := es.client.Txn(es.client.Ctx()).Then(
 		clientv3.OpPut(globalRevisionKey, ""),
 		clientv3.OpDelete(key),
@@ -135,7 +135,7 @@ func (es *Store) Delete(key string) (int64, error) {
 
 // Watch implements store.Watcher interface.
 func (es *Store) Watch(ctx context.Context, key string, revision int64) (<-chan store.Event, error) {
-	key = ensureKey(key)
+	key = normalizeKey(key)
 	c := make(chan store.Event, watchBufSize)
 	go func() {
 		for resp := range es.client.Watch(ctx, key, clientv3.WithPrefix(), clientv3.WithRev(revision)) {
