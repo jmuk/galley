@@ -75,7 +75,7 @@ func (es *Store) Get(key string) ([]byte, int64, error) {
 }
 
 // List implements store.Reader interface.
-func (es *Store) List(prefix string) (map[string]string, int64, error) {
+func (es *Store) List(prefix string) (map[string][]byte, int64, error) {
 	prefix = normalizeKey(prefix)
 	if !strings.HasSuffix(prefix, "/") {
 		prefix = prefix + "/"
@@ -84,9 +84,9 @@ func (es *Store) List(prefix string) (map[string]string, int64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	data := map[string]string{}
+	data := map[string][]byte{}
 	for _, kvs := range resp.Kvs {
-		data[string(kvs.Key)] = string(kvs.Value)
+		data[string(kvs.Key)] = kvs.Value
 	}
 	return data, resp.Header.Revision, nil
 }

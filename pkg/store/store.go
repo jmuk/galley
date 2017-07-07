@@ -28,7 +28,7 @@ type Store interface {
 	Get(key string) (value []byte, revision int64, err error)
 
 	// List keys with the key prefix. Reply includes values.
-	List(keyPrefix string) (data map[string]string, revision int64, err error)
+	List(keyPrefix string) (data map[string][]byte, revision int64, err error)
 
 	// Set a value. revision is used for optimistic concurrency.
 	// When revision is negative, it sets the value without checking.
