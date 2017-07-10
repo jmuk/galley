@@ -44,6 +44,7 @@ func (s *GalleyService) GetFile(ctx context.Context, req *galleypb.GetFileReques
 	if err == store.ErrNotFound {
 		return nil, status.New(codes.NotFound, err.Error()).Err()
 	}
+	sendFileHeader(ctx, f)
 	return f, nil
 }
 
@@ -71,6 +72,7 @@ func (s *GalleyService) createOrUpdate(ctx context.Context, file *galleypb.File,
 		return nil, err
 	}
 	file.Revision = revision
+	sendFileHeader(ctx, file)
 	return file, nil
 }
 

@@ -6,6 +6,7 @@ go_library(
     name = "go_default_library",
     srcs = [
         "galley.go",
+        "marshaler.go",
         "service.go",
         "util.go",
     ],
@@ -16,6 +17,7 @@ go_library(
         "//pkg/store/inventory:go_default_library",
         "@com_github_golang_protobuf//proto:go_default_library",
         "@org_golang_google_grpc//codes:go_default_library",
+        "@org_golang_google_grpc//metadata:go_default_library",
         "@org_golang_google_grpc//status:go_default_library",
         "@org_golang_x_net//context:go_default_library",
     ],

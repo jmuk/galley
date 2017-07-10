@@ -55,7 +55,13 @@ func CreateServer(url string) (*Server, error) {
 func (s *Server) startGateway(grpcPort, restPort uint16) error {
 	ctx := context.Background()
 
-	mux := runtime.NewServeMux()
+	jsonpb := &runtime.JSONPb{}
+	ctypes := []string{"text/plain", "text/json", "text/yaml", "application/octet-stream"}
+	mopts := make([]runtime.ServeMuxOption, 0, len(ctypes))
+	for _, ctype := range ctypes {
+		mopts = append(mopts, runtime.WithMarshalerOption(ctype, &RawMarshaler{jsonpb, ctype}))
+	}
+	mux := runtime.NewServeMux(mopts...)
 	opts := []grpc.DialOption{
 		grpc.WithInsecure(),
 		// grpc.WithMaxMsgSize(int(maxMessageSize)),

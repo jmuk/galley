@@ -15,13 +15,24 @@
 package server
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	galleypb "istio.io/galley/api/galley/v1"
 	"istio.io/galley/pkg/store"
 )
+
+func sendFileHeader(ctx context.Context, file *galleypb.File) error {
+	return grpc.SendHeader(ctx, metadata.Pairs(
+		"file-path", file.Path,
+		"file-revision", fmt.Sprintf("%d", file.Revision),
+	))
+}
 
 func getFile(s store.Store, path string) (*galleypb.File, error) {
 	value, revision, err := s.Get(path + ":raw")
