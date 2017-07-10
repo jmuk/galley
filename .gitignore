@@ -5,6 +5,7 @@ coverage.txt
 *.a
 *.so
 *.pb.go
+*.pb.gw.go
 *.pb.cc
 *.pb.h
 
