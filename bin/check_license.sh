@@ -5,7 +5,7 @@ cd $ROOTDIR
 
 ret=0
 for fn in $(find ${ROOTDIR} -name '*.go'); do
-  if [[ $fn == *.pb.go ]];then
+  if [[ $fn == *.pb.go || $fn == *.pb.gw.go ]];then
     continue
   fi
   head -20 $fn | grep "Apache License, Version 2" > /dev/null

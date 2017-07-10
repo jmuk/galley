@@ -189,7 +189,7 @@ def protos(WKSPC):
         if directory.startswith(external):
             continue
         for file in filenames:
-            if file.endswith(".pb.go"):
+            if file.endswith(".pb.go") or file.endswith(".pb.gw.go"):
                 src = os.path.join(directory, file)
                 dest = os.path.join(WKSPC, os.path.relpath(src, genfiles))
                 makelink(src, dest)
