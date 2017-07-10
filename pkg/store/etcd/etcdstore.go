@@ -33,6 +33,8 @@ const watchBufSize int = 10
 // globalRevisionKey is the key to track the storage revision.
 // This is used for Set() method to ensure that no other operations are
 // made outside.
+// TODO: remove this if we find the way to use the storage revision
+// in the transaction conditions.
 const globalRevisionKey string = "global_revision"
 
 // Store implements store.Store for etcd.
