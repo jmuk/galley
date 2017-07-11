@@ -97,7 +97,7 @@ func (s *GalleyService) UpdateFile(ctx context.Context, req *galleypb.UpdateFile
 // DeleteFile implements galleypb.Galley interface.
 func (s *GalleyService) DeleteFile(ctx context.Context, req *galleypb.DeleteFileRequest) (*empty.Empty, error) {
 	// TODO: validation.
-	_, err := s.s.Delete(req.Path)
+	_, err := s.s.Delete(req.Path + ":raw")
 	if err != nil {
 		return nil, err
 	}
