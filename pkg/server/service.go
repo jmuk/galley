@@ -66,20 +66,17 @@ func (s *GalleyService) createOrUpdate(ctx context.Context, file *galleypb.File,
 	// TODO: parse the contents accoding to ctype, and then store the parsed data for watchers.
 	// TODO: validate the contents, invoke validation servers.
 	// Maybe we want to store parsed data (i.e. ConfigFile message) separately, using ":raw" suffix for this reason.
-	var revision int64
-	revision, err = s.s.Set(file.Path+":raw", bytes, -1 /* revision */)
+	file.Revision, err = s.s.Set(file.Path+":raw", bytes, -1 /* revision */)
 	if err != nil {
 		return nil, err
 	}
-	file.Revision = revision
 	sendFileHeader(ctx, file)
 	return file, nil
 }
 
 // CreateFile implements galleypb.Galley interface.
 func (s *GalleyService) CreateFile(ctx context.Context, req *galleypb.CreateFileRequest) (*galleypb.File, error) {
-	_, err := getFile(s.s, req.Path)
-	if err == nil {
+	if _, err := getFile(s.s, req.Path); err == nil {
 		return nil, status.Newf(codes.InvalidArgument, "path %s already existed", req.Path).Err()
 	}
 	return s.createOrUpdate(ctx, &galleypb.File{Path: req.Path, Contents: req.Contents, Metadata: req.Metadata}, req.ContentType)
@@ -87,8 +84,7 @@ func (s *GalleyService) CreateFile(ctx context.Context, req *galleypb.CreateFile
 
 // UpdateFile implements galleypb.Galley interface.
 func (s *GalleyService) UpdateFile(ctx context.Context, req *galleypb.UpdateFileRequest) (*galleypb.File, error) {
-	_, err := getFile(s.s, req.Path)
-	if err != nil {
+	if _, err := getFile(s.s, req.Path); err != nil {
 		return nil, status.Newf(codes.NotFound, "can't update %s, not found", req.Path).Err()
 	}
 	return s.createOrUpdate(ctx, &galleypb.File{Path: req.Path, Contents: req.Contents, Metadata: req.Metadata}, req.ContentType)

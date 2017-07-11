@@ -16,7 +16,7 @@ package server
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
@@ -30,7 +30,7 @@ import (
 func sendFileHeader(ctx context.Context, file *galleypb.File) error {
 	return grpc.SendHeader(ctx, metadata.Pairs(
 		"file-path", file.Path,
-		"file-revision", fmt.Sprintf("%d", file.Revision),
+		"file-revision", strconv.FormatInt(file.Revision, 10),
 	))
 }
 

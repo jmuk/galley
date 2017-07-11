@@ -33,19 +33,17 @@ type rawDecoder struct {
 
 func (d *rawDecoder) Decode(v interface{}) error {
 	var err error
-	field, ok := v.(*[]byte)
-	if ok {
-		*field, err = ioutil.ReadAll(d.r)
+	switch out := v.(type) {
+	case *[]byte:
+		*out, err = ioutil.ReadAll(d.r)
 		return err
-	}
-	stringField, sok := v.(*string)
-	if sok {
+	case *string:
 		var bs []byte
 		bs, err = ioutil.ReadAll(d.r)
 		if err != nil {
 			return err
 		}
-		*stringField = string(bs)
+		*out = string(bs)
 		return nil
 	}
 	return fmt.Errorf("type mismatch for input %v", v)

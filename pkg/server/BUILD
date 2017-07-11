@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "small_tests",
+    size = "small",
     srcs = [
         "marshaler_test.go",
         "service_test.go",
