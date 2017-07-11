@@ -8,7 +8,9 @@ load("@org_pubref_rules_protobuf//grpc_gateway:rules.bzl", "grpc_gateway_proto_c
 filegroup(
     name = "galley_core_protos",
     srcs = [
+        "galley/v1/config_object.proto",
         "galley/v1/error_types.proto",
+        "galley/v1/metadata.proto",
     ],
 )
 
