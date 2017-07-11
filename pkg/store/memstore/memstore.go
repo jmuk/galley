@@ -43,7 +43,7 @@ func (ms *Store) Close() error {
 }
 
 // Get implements store.Reader interface.
-func (ms *Store) Get(key string) ([]byte, int64, error) {
+func (ms *Store) Get(ctx context.Context, key string) ([]byte, int64, error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 	value, ok := ms.data[key]
@@ -54,7 +54,7 @@ func (ms *Store) Get(key string) ([]byte, int64, error) {
 }
 
 // List implements store.Reader interface.
-func (ms *Store) List(prefix string) (map[string][]byte, int64, error) {
+func (ms *Store) List(ctx context.Context, prefix string) (map[string][]byte, int64, error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 	if !strings.HasSuffix(prefix, "/") {
@@ -71,7 +71,7 @@ func (ms *Store) List(prefix string) (map[string][]byte, int64, error) {
 }
 
 // Set implements store.Writer interface.
-func (ms *Store) Set(key string, value []byte, revision int64) (int64, error) {
+func (ms *Store) Set(ctx context.Context, key string, value []byte, revision int64) (int64, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	if revision >= 0 && ms.revision > revision {
@@ -87,7 +87,7 @@ func (ms *Store) Set(key string, value []byte, revision int64) (int64, error) {
 }
 
 // Delete implements store.Writer interface.
-func (ms *Store) Delete(key string) (int64, error) {
+func (ms *Store) Delete(ctx context.Context, key string) (int64, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	delete(ms.data, key)

@@ -25,19 +25,19 @@ import (
 // Store provides a generic interface to a key value store.
 type Store interface {
 	// Get value at a key. Returns non-nil error if not found.
-	Get(key string) (value []byte, revision int64, err error)
+	Get(ctx context.Context, key string) (value []byte, revision int64, err error)
 
 	// List keys with the key prefix. Reply includes values.
-	List(keyPrefix string) (data map[string][]byte, revision int64, err error)
+	List(ctx context.Context, keyPrefix string) (data map[string][]byte, revision int64, err error)
 
 	// Set a value. revision is used for optimistic concurrency.
 	// When revision is negative, it sets the value without checking.
 	// When the error happens due to the failure of optimistic concurrency,
 	// it should return RevisionMismatchError.
-	Set(key string, value []byte, revision int64) (outRevision int64, err error)
+	Set(ctx context.Context, key string, value []byte, revision int64) (outRevision int64, err error)
 
 	// Delete a key.
-	Delete(key string) (outRevision int64, err error)
+	Delete(ctx context.Context, key string) (outRevision int64, err error)
 
 	Watcher
 	fmt.Stringer

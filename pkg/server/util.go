@@ -34,8 +34,8 @@ func sendFileHeader(ctx context.Context, file *galleypb.File) error {
 	))
 }
 
-func getFile(s store.Store, path string) (*galleypb.File, error) {
-	value, revision, err := s.Get(path + ":raw")
+func getFile(ctx context.Context, s store.Store, path string) (*galleypb.File, error) {
+	value, revision, err := s.Get(ctx, path+":raw")
 	if err != nil {
 		return nil, err
 	}
@@ -47,8 +47,8 @@ func getFile(s store.Store, path string) (*galleypb.File, error) {
 	return file, nil
 }
 
-func readFiles(s store.Store, prefix string) ([]*galleypb.File, int64, error) {
-	data, revision, err := s.List(prefix)
+func readFiles(ctx context.Context, s store.Store, prefix string) ([]*galleypb.File, int64, error) {
+	data, revision, err := s.List(ctx, prefix)
 	if err != nil {
 		return nil, 0, err
 	}

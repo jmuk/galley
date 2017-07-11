@@ -40,7 +40,7 @@ func NewGalleyService(s store.Store) (*GalleyService, error) {
 
 // GetFile implements galleypb.Galley interface.
 func (s *GalleyService) GetFile(ctx context.Context, req *galleypb.GetFileRequest) (*galleypb.File, error) {
-	f, err := getFile(s.s, req.Path)
+	f, err := getFile(ctx, s.s, req.Path)
 	if err == store.ErrNotFound {
 		return nil, status.New(codes.NotFound, err.Error()).Err()
 	}
@@ -51,7 +51,7 @@ func (s *GalleyService) GetFile(ctx context.Context, req *galleypb.GetFileReques
 // ListFiles implements galleypb.Galley interface.
 func (s *GalleyService) ListFiles(ctx context.Context, req *galleypb.ListFilesRequest) (*galleypb.ListFilesResponse, error) {
 	// TODO: support page tokens.
-	entries, _, err := readFiles(s.s, req.Path)
+	entries, _, err := readFiles(ctx, s.s, req.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (s *GalleyService) createOrUpdate(ctx context.Context, file *galleypb.File,
 	// TODO: parse the contents accoding to ctype, and then store the parsed data for watchers.
 	// TODO: validate the contents, invoke validation servers.
 	// Maybe we want to store parsed data (i.e. ConfigFile message) separately, using ":raw" suffix for this reason.
-	file.Revision, err = s.s.Set(file.Path+":raw", bytes, -1 /* revision */)
+	file.Revision, err = s.s.Set(ctx, file.Path+":raw", bytes, -1 /* revision */)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (s *GalleyService) createOrUpdate(ctx context.Context, file *galleypb.File,
 
 // CreateFile implements galleypb.Galley interface.
 func (s *GalleyService) CreateFile(ctx context.Context, req *galleypb.CreateFileRequest) (*galleypb.File, error) {
-	if _, err := getFile(s.s, req.Path); err == nil {
+	if _, err := getFile(ctx, s.s, req.Path); err == nil {
 		return nil, status.Newf(codes.InvalidArgument, "path %s already existed", req.Path).Err()
 	}
 	return s.createOrUpdate(ctx, &galleypb.File{Path: req.Path, Contents: req.Contents, Metadata: req.Metadata}, req.ContentType)
@@ -84,7 +84,7 @@ func (s *GalleyService) CreateFile(ctx context.Context, req *galleypb.CreateFile
 
 // UpdateFile implements galleypb.Galley interface.
 func (s *GalleyService) UpdateFile(ctx context.Context, req *galleypb.UpdateFileRequest) (*galleypb.File, error) {
-	if _, err := getFile(s.s, req.Path); err != nil {
+	if _, err := getFile(ctx, s.s, req.Path); err != nil {
 		return nil, status.Newf(codes.NotFound, "can't update %s, not found", req.Path).Err()
 	}
 	return s.createOrUpdate(ctx, &galleypb.File{Path: req.Path, Contents: req.Contents, Metadata: req.Metadata}, req.ContentType)
@@ -93,7 +93,7 @@ func (s *GalleyService) UpdateFile(ctx context.Context, req *galleypb.UpdateFile
 // DeleteFile implements galleypb.Galley interface.
 func (s *GalleyService) DeleteFile(ctx context.Context, req *galleypb.DeleteFileRequest) (*empty.Empty, error) {
 	// TODO: validation.
-	_, err := s.s.Delete(req.Path + ":raw")
+	_, err := s.s.Delete(ctx, req.Path+":raw")
 	if err != nil {
 		return nil, err
 	}

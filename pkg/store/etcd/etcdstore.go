@@ -61,9 +61,9 @@ func normalizeKey(key string) string {
 }
 
 // Get implements store.Reader interface.
-func (es *Store) Get(key string) ([]byte, int64, error) {
+func (es *Store) Get(ctx context.Context, key string) ([]byte, int64, error) {
 	key = normalizeKey(key)
-	resp, err := es.client.Get(es.client.Ctx(), key)
+	resp, err := es.client.Get(ctx, key)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -77,12 +77,12 @@ func (es *Store) Get(key string) ([]byte, int64, error) {
 }
 
 // List implements store.Reader interface.
-func (es *Store) List(prefix string) (map[string][]byte, int64, error) {
+func (es *Store) List(ctx context.Context, prefix string) (map[string][]byte, int64, error) {
 	prefix = normalizeKey(prefix)
 	if !strings.HasSuffix(prefix, "/") {
 		prefix = prefix + "/"
 	}
-	resp, err := es.client.Get(es.client.Ctx(), prefix, clientv3.WithPrefix())
+	resp, err := es.client.Get(ctx, prefix, clientv3.WithPrefix())
 	if err != nil {
 		return nil, 0, err
 	}
@@ -94,18 +94,18 @@ func (es *Store) List(prefix string) (map[string][]byte, int64, error) {
 }
 
 // Set implements store.Writer interface.
-func (es *Store) Set(key string, value []byte, revision int64) (int64, error) {
+func (es *Store) Set(ctx context.Context, key string, value []byte, revision int64) (int64, error) {
 	var err error
 	key = normalizeKey(key)
 	var resp *clientv3.TxnResponse
-	txn := es.client.Txn(es.client.Ctx())
+	txn := es.client.Txn(ctx)
 	if revision < 0 {
 		resp, err = txn.Then(
 			clientv3.OpPut(key, string(value)),
 			clientv3.OpPut(globalRevisionKey, ""),
 		).Commit()
 	} else {
-		resp, err = es.client.Txn(es.client.Ctx()).If(
+		resp, err = txn.If(
 			clientv3.Compare(clientv3.ModRevision(globalRevisionKey), "<", revision+1)).Then(
 			clientv3.OpPut(key, string(value)),
 			clientv3.OpPut(globalRevisionKey, ""),
@@ -126,9 +126,9 @@ func (es *Store) Set(key string, value []byte, revision int64) (int64, error) {
 }
 
 // Delete implements store.Writer interface.
-func (es *Store) Delete(key string) (int64, error) {
+func (es *Store) Delete(ctx context.Context, key string) (int64, error) {
 	key = normalizeKey(key)
-	resp, err := es.client.Txn(es.client.Ctx()).Then(
+	resp, err := es.client.Txn(ctx).Then(
 		clientv3.OpPut(globalRevisionKey, ""),
 		clientv3.OpDelete(key),
 	).Commit()

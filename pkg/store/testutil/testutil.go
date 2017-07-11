@@ -75,8 +75,9 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 		t.Run(tt.desc, func(t1 *testing.T) {
 			var rv int64
 			var err error
+			ctx := context.Background()
 			badkey := "a/b"
-			_, rv, err = s.Get(badkey)
+			_, rv, err = s.Get(ctx, badkey)
 			if err == nil {
 				t.Errorf("Unexpectedly found %s", badkey)
 			}
@@ -84,36 +85,36 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 			// create keys
 			for _, key := range tt.keys {
 				kc := []byte(key)
-				_, err = s.Set(key, kc, -1)
+				_, err = s.Set(ctx, key, kc, -1)
 				if err != nil {
 					t.Errorf("Unexpected error for %s: %v", key, err)
 				}
-				val, _, err = s.Get(key)
+				val, _, err = s.Get(ctx, key)
 				if err != nil || !bytes.Equal(kc, val) {
 					t.Errorf("Got %s\nWant %s\nError: %v", val, kc, err)
 				}
 			}
 
 			// check of optimistic concurrency
-			_, err = s.Set(tt.keys[0], []byte("wrong_data"), rv)
+			_, err = s.Set(ctx, tt.keys[0], []byte("wrong_data"), rv)
 			if err == nil {
 				t.Errorf("Unexpected succeed of Set")
 			}
 			var d1 []byte
-			d1, rv, err = s.Get(tt.keys[0])
+			d1, rv, err = s.Get(ctx, tt.keys[0])
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
-			rv, err = s.Set(tt.keys[0], []byte("new data"), rv)
+			rv, err = s.Set(ctx, tt.keys[0], []byte("new data"), rv)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
-			_, err = s.Set(tt.keys[0], d1, rv)
+			_, err = s.Set(ctx, tt.keys[0], d1, rv)
 			if err != nil {
 				t.Errorf("Unepxected error: %v", err)
 			}
 
-			d, _, err := s.List(tt.listPrefix)
+			d, _, err := s.List(ctx, tt.listPrefix)
 			if err != nil {
 				t.Error("Unexpected error", err)
 			}
@@ -128,7 +129,7 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 
 			// Get the same list again, to make sure the cache of lists
 			// are not broken.
-			d, _, err = s.List(tt.listPrefix)
+			d, _, err = s.List(ctx, tt.listPrefix)
 			if err != nil {
 				t.Error("Unexpected error", err)
 			}
@@ -141,12 +142,12 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 				t.Errorf("Got %s\nWant %s\n", k, tt.listKeys)
 			}
 
-			_, err = s.Delete(k[1])
+			_, err = s.Delete(ctx, k[1])
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			_, _, err = s.Get(k[1])
+			_, _, err = s.Get(ctx, k[1])
 			if err == nil {
 				t.Errorf("Unexpectedly found %s", k[1])
 			}
@@ -162,41 +163,41 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, error)) {
 	for _, tt := range []struct {
 		desc      string
-		operation func(s store.Store, keyPrefix string) (int64, error)
+		operation func(ctx context.Context, s store.Store, keyPrefix string) (int64, error)
 		ok        bool
-		cleanup   func(s store.Store, keyPrefix string) error
+		cleanup   func(ctx context.Context, s store.Store, keyPrefix string) error
 	}{
 		{
 			"set foo",
-			func(s store.Store, keyPrefix string) (int64, error) {
-				return s.Set(keyPrefix+"foo", []byte("foobar"), -1)
+			func(ctx context.Context, s store.Store, keyPrefix string) (int64, error) {
+				return s.Set(ctx, keyPrefix+"foo", []byte("foobar"), -1)
 			},
 			false,
 			nil,
 		},
 		{
 			"set bar",
-			func(s store.Store, keyPrefix string) (int64, error) {
-				return s.Set(keyPrefix+"bar", []byte("bar"), -1)
+			func(ctx context.Context, s store.Store, keyPrefix string) (int64, error) {
+				return s.Set(ctx, keyPrefix+"bar", []byte("bar"), -1)
 			},
 			false,
-			func(s store.Store, keyPrefix string) error {
-				_, err := s.Delete(keyPrefix + "bar")
+			func(ctx context.Context, s store.Store, keyPrefix string) error {
+				_, err := s.Delete(ctx, keyPrefix+"bar")
 				return err
 			},
 		},
 		{
 			"delete foo",
-			func(s store.Store, keyPrefix string) (int64, error) {
-				return s.Delete(keyPrefix + "foo")
+			func(ctx context.Context, s store.Store, keyPrefix string) (int64, error) {
+				return s.Delete(ctx, keyPrefix+"foo")
 			},
 			false,
 			nil,
 		},
 		{
 			"get foo",
-			func(s store.Store, keyPrefix string) (int64, error) {
-				_, revision, err := s.Get(keyPrefix + "foo")
+			func(ctx context.Context, s store.Store, keyPrefix string) (int64, error) {
+				_, revision, err := s.Get(ctx, keyPrefix+"foo")
 				return revision, err
 			},
 			true,
@@ -204,6 +205,7 @@ func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, e
 		},
 	} {
 		t.Run(tt.desc, func(t1 *testing.T) {
+			ctx := context.Background()
 			keyPrefix := "/" + t1.Name() + "/"
 			km, err := newManagerFn()
 			if err != nil {
@@ -211,11 +213,11 @@ func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, e
 			}
 			s := km.store
 			defer func() {
-				if _, err = s.Delete(keyPrefix + "foo"); err != nil {
+				if _, err = s.Delete(ctx, keyPrefix+"foo"); err != nil {
 					t1.Errorf("failure on cleanup: deletion of foo: %v", err)
 				}
 				if tt.cleanup != nil {
-					if err = tt.cleanup(s, keyPrefix); err != nil {
+					if err = tt.cleanup(ctx, s, keyPrefix); err != nil {
 						t1.Errorf("failure on cleanup: per-operation cleanup: %v", err)
 					}
 				}
@@ -223,22 +225,22 @@ func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, e
 					t1.Errorf("failure on cleanup: %v", err)
 				}
 			}()
-			_, err = s.Set(keyPrefix+"foo", []byte("foo"), -1)
+			_, err = s.Set(ctx, keyPrefix+"foo", []byte("foo"), -1)
 			if err != nil {
 				t1.Fatalf("failed to set: %v", err)
 			}
-			v, revision, err := s.Get(keyPrefix + "foo")
+			v, revision, err := s.Get(ctx, keyPrefix+"foo")
 			if err != nil {
 				t1.Fatalf("failed to get: %v", err)
 			}
 			if string(v) != "foo" {
 				t1.Fatalf("Got %s\nWant foo", v)
 			}
-			revision2, err := tt.operation(s, keyPrefix)
+			revision2, err := tt.operation(ctx, s, keyPrefix)
 			if err != nil {
 				t1.Fatalf("failure on other operation: %v", err)
 			}
-			_, err = s.Set(keyPrefix+"foo", []byte("bar"), revision)
+			_, err = s.Set(ctx, keyPrefix+"foo", []byte("bar"), revision)
 			if tt.ok {
 				if err != nil {
 					t1.Errorf("expected to succeed, but failed: %v", err)
@@ -251,11 +253,11 @@ func RunOptimisticConcurrency(t *testing.T, newManagerFn func() (*TestManager, e
 			if _, ok := err.(*store.RevisionMismatchError); !ok {
 				t1.Fatalf("the error %v isn't expected", err)
 			}
-			_, err = s.Set(keyPrefix+"foo", []byte("bar"), revision2)
+			_, err = s.Set(ctx, keyPrefix+"foo", []byte("bar"), revision2)
 			if err != nil {
 				t1.Fatalf("failed to set foo: %v", err)
 			}
-			v, _, err = s.Get(keyPrefix + "foo")
+			v, _, err = s.Get(ctx, keyPrefix+"foo")
 			if err != nil {
 				t1.Fatalf("failed to get foo: %v", err)
 			}
@@ -292,7 +294,11 @@ func RunWatcherTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 		t.Fatalf("failed to create a new manager: %v", err)
 	}
 	s := km.store
-	_, rv, err := s.List("")
+
+	watchdone := make(chan interface{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+	_, rv, err := s.List(ctx, "")
 	if err != nil {
 		t.Fatalf("failed to get the revision: %v", err)
 	}
@@ -303,8 +309,6 @@ func RunWatcherTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 		{Type: store.DELETE, Key: "/test/k2", PreviousValue: []byte("v2")},
 	}
 
-	watchdone := make(chan interface{})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	wch, err := s.Watch(ctx, "/test/", rv)
 	if err != nil {
 		t.Fatalf("can't watch: %v", err)
@@ -325,23 +329,23 @@ func RunWatcherTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 		close(watchdone)
 	}()
 
-	rv, err = s.Set("/test/k1", []byte("v1"), rv)
+	rv, err = s.Set(ctx, "/test/k1", []byte("v1"), rv)
 	if err != nil {
 		t.Errorf("failed to set: %v", err)
 	}
-	rv, err = s.Set("/test2/k1", []byte("v21"), rv)
+	rv, err = s.Set(ctx, "/test2/k1", []byte("v21"), rv)
 	if err != nil {
 		t.Errorf("failed to set: %v", err)
 	}
-	rv, err = s.Set("/test/k2", []byte("v2"), rv)
+	rv, err = s.Set(ctx, "/test/k2", []byte("v2"), rv)
 	if err != nil {
 		t.Errorf("failed to set: %v", err)
 	}
-	_, err = s.Set("/test/k1", []byte("v11"), rv)
+	_, err = s.Set(ctx, "/test/k1", []byte("v11"), rv)
 	if err != nil {
 		t.Errorf("failed to set: %v", err)
 	}
-	_, err = s.Delete("/test/k2")
+	_, err = s.Delete(ctx, "/test/k2")
 	if err != nil {
 		t.Errorf("failed to set: %v", err)
 	}
