@@ -44,7 +44,9 @@ func (s *GalleyService) GetFile(ctx context.Context, req *galleypb.GetFileReques
 	if err == store.ErrNotFound {
 		return nil, status.New(codes.NotFound, err.Error()).Err()
 	}
-	sendFileHeader(ctx, f)
+	if err = sendFileHeader(ctx, f); err != nil {
+		return nil, err
+	}
 	return f, nil
 }
 
@@ -70,7 +72,9 @@ func (s *GalleyService) createOrUpdate(ctx context.Context, file *galleypb.File,
 	if err != nil {
 		return nil, err
 	}
-	sendFileHeader(ctx, file)
+	if err = sendFileHeader(ctx, file); err != nil {
+		return nil, err
+	}
 	return file, nil
 }
 

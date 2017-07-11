@@ -463,6 +463,16 @@ new_go_repository(
     importpath = "github.com/coreos/etcd",
 )
 
+# This go repository is actually not necessary to build the binary.
+# But otherwise bazel_to_go.py can't create the correct vendor link for this repository,
+# which leads to wrong lint errors.
+# TODO: fix bazel_to_go.py and remove this.
+new_go_repository(
+    name = "com_github_grpc_ecosystem_grpc_gateway",
+    commit = "a5c7982c02e20b0d22f1f50ff20fbb85aa30433a",  # Jun 23, 2017 (no release)
+    importpath = "github.com/grpc-ecosystem/grpc-gateway",
+)
+
 ##
 ## Testing
 ##
