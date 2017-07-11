@@ -18,6 +18,8 @@ package istio.galley.v1;
 import "google/api/annotations.proto";
 import "google/protobuf/empty.proto";
 
+import "api/galley/v1/metadata.proto";
+
 // Galley uses a hierarchical resource model.
 //
 // Directories are organizational units that can be protected by ACLs.
@@ -166,11 +168,4 @@ message File{
   // revision of the repository, the last time file was updated.
   // assigned by the server.
   int64 revision = 4;
-}
-
-// Metadata is client side meta data.
-// It is not interpreted by Galley.
-message Metadata {
-  // arbitrary labels.
-  map<string, string> labels = 1;
 }

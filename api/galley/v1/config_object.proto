@@ -1,0 +1,114 @@
+// Copyright 2017 Istio Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package istio.galley.v1;
+
+import "google/protobuf/struct.proto";
+
+import "api/galley/v1/metadata.proto";
+
+// This file defines the file format used by the Galley file system api.
+
+// ConfigFile is a configuration file stored at a location.
+message ConfigFile {
+
+  // Scope of a configuration object is defined as the limit of applicability 
+  // of that object to a dns subdomain. 
+  // Myservice.mydept.example.com or mydept.example.com are examples of a scope.
+  // A service scope (myservice.mydept.example.com) means that the document contains configuration
+  // that is owned by and affects the service. Similarly one level higher scope
+  // like mydept.example.com may affect self and any of the services contained in that subdomain.
+  // The effect of configuration in the file must be contained within the scope.
+  string scope = 1;
+ 
+  // Name of the config file.
+  // A file must have a *.cfg extension.
+  // The tuple (scope, name) must be unique.
+  string name = 2;
+  
+  // metadata associated with the file. Optional.
+  Metadata metadata = 3;
+
+  // metadata assigned by the server. Cannot be changed by the client.
+  // ServerMetadata is not stored inside the object. Galley decorates the raw ConfigFile
+  // message with server metadata before handing it back to the client.
+  ServerMetadata serverMetadata =  4;
+
+  // "Config" is a list of configuration objects.
+  repeated ConfigObject config = 5;
+}
+
+// The basic atom of configuration as understood by Istio components.
+message ConfigObject {
+  // Name of the object. Optional but recommended.
+  // The granularity of the top level config objects should be such that
+  // users are not forced to name objects unnecessarily.
+  // For example route-rules could be a top level object that is 'repeated route-rule'.
+  // If name is specified then the tuple (type, name) must be unique within a ConfigFile.
+  string name = 1;
+
+  // Type of the config object.
+  // metrics, route-rule are config “types”. Required.
+  string type = 2;
+
+  // Metadata associated with the object. Optional.
+  Metadata metadata = 3;
+
+  // spec is 'type' specific configuration
+  // This contains everything that was submitted by the user.
+  // spec is validated by Validators.
+  google.protobuf.Struct spec = 4;
+
+  // processed_spec is the binary encoded protobuf.
+  // 
+  // It should be used by the Validator / Transformer components to generate
+  // a preprocessed and optimized version of spec.
+  bytes processed_spec = 5;
+
+  // Schema_id denotes the full name of the proto schema specified by the 'type'.
+  // For example: route-rule corresponds to istio.proxy.v1.config.RouteRule.
+  // schema_id is returned by the Validator / Transformer and it is stored with the object.
+  // If a proto changes in a backwards incompatible way, it must get a new schema_id.
+  // Schema_id may contain sematic version information.
+  string schema_id = 6;
+}
+
+// A change to the Galley config store.
+// ConfigFileChange is used by validators and watchers.
+// When used with validators it is a proposed change.
+// When used with watchers it is a change notification.
+message ConfigFileChange {
+  enum EventType {
+    UNKNOWN = 0;
+    PUT = 1;  // ADD and UPDATE
+    DELETE = 2;
+  }
+  // If type is a PUT, it indicates that
+  // new data has been stored to the key. If type is a DELETE,
+  // it indicates the key was deleted.
+  EventType type = 1;
+
+  // File_id is a unique Id of the config file that changed.
+  // File path is not used here to ensure that other components do not rely on it.
+  // File_id may be used to compare for equality but should not be otherwise interpreted.
+  string file_id = 2;
+
+  // New_file is the file *after* the operation completes.
+  // After a DELETE operation new_file.config will not be set.
+  ConfigFile new_file = 3;
+
+  // Old_file is the file before the operation begins, if one existed at that location.
+  ConfigFile old_file = 4;
+}
