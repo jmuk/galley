@@ -1,0 +1,83 @@
+// Copyright 2017 Istio Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package istio.galley.v1;
+
+import "google/api/annotations.proto";
+
+import "api/galley/v1/config_object.proto";
+
+// TransformerAndValidator service.
+//
+// Galley uses the TransformerAndValidator service to transform and validate incoming
+// configuration changes. Galley knows about a set of validator services through configuration.
+// On an incoming config change, Galley broadcasts the change to all available validators.
+// A validator must transform and validate all ConfigObject types it can process.
+// A validator must not modify other ConfigObjects in the ConfigFile.
+//
+// Galley collects responses from all validators and
+// 1. Signals UnkownType error if a ConfigObject type was left unvalidated.
+// 2. Signals error if validators transformed the same object in conflicting ways.
+// 3. On a successful merge, Galley commits the [ConfigFile] to storage.
+//
+// The TransformerAndValidator service does the following.
+// 1. Validates [ConfigObject] types before they are committed to storage.
+// 2. Trasforms [ConfigObject.spec] into [ConfigObject.processed_spec]
+// A single validator may validate many types.
+// For example MixerValidator service may validate all Mixer resources.
+service TransformerAndValidator {
+
+  // TransformAndValidate ConfigFile.
+  //
+  // Every attempt should be made to do a deep validation.
+  // If full validation requires referential integrity checks, this service should use the
+  // GalleyWatch Service to maintain current view of the configuration.
+  //
+  // For example a Mixer rule consists of a selector expression and a named handler amongst other things. 
+  // Mixer validator should check 
+  // 1. expression syntax is valid
+  // 2. expression uses known attributes
+  // 3. Rule refers to a known handler
+  // 4. Any other semantic check that is required for full validation.
+  //
+  // It should convert the untyped proto [ConfigObject.spec] into a typed proto
+  // and return binary encoding of it in ConfigObject.processed_spec.
+  // It should also set [ConfigObject.schema_id] appropriately. Check [ConfigObject.schema_id] for details.
+  // 
+  // On validation failure google.rpc.Status.details contains reasons for the failure as [ValidationError]s.
+  rpc TransformAndValidate(ValidationRequest) returns (ValidationResponse) {
+    option (google.api.http) = {
+      post: "/resources/v1:validate"
+      body: "*"
+    };
+  };
+};
+
+// ValidationRequest is the request for config validation.
+message ValidationRequest {
+  // Validator must ensure that the configuration in the file does not
+  // exceed ConfigFile.scope.
+  ConfigFileChange validation = 1;
+
+  // Objects should be validated against this revision of the repository.
+  // Stateless validators may ignore this field.
+  // For example, validation_revision is useful for referential integrity checks. 
+  int64 validation_revision = 2;
+}
+
+message ValidationResponse {
+  // state of the file after transformation.
+  ConfigFile file = 1;
+}

@@ -1,0 +1,112 @@
+// Copyright 2017 Istio Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package istio.galley.v1;
+
+import "google/rpc/status.proto";
+import "google/api/annotations.proto";
+
+import "api/galley/v1/config_object.proto";
+
+// Galley Watcher service is designed for clients to efficiently watch resource subtrees.
+service Watcher {
+  // Watch watches for events occurring in Galley.
+  // A watch is created by creating a watch stream.
+  // The stream may begin with the current state of the subtree
+  // if include_initial_state=true.
+  rpc Watch(WatchRequest) returns (stream WatchResponse) {
+    option (google.api.http) = {
+      post: "/events/v1:watch"
+      body: "*"
+    };
+  };
+};
+
+// WatchRequest creates a watch stream.
+message WatchRequest {
+  // Scope denotes the watched subtree, empty scope denotes the entire tree.
+  string scope = 1;
+
+  // config 'types' to watch.
+  repeated string types = 2;
+
+  // start watching from this revision of the repository.
+  // If the requested revision is not available, the watch request should fail.
+  // if not specified "now" is used.
+  int64 start_revision = 3;
+
+  // stream the inital state of the tree before sending updates.
+  bool include_initial_state = 4;
+}
+
+// WatchResponse message on the response stream.
+message WatchResponse {
+  // if a watcher could not be created or had to be aborted status is NON-OK.
+  // client should not look at other fields if status is not OK.
+  google.rpc.Status status = 1;
+
+  oneof response_union {
+    // Watch was successfully created.
+    WatchCreated created = 2;
+
+    // Initial state when the watch begins.
+    InitialState initial_state = 3;
+
+    // response contains events from a watched subtree.
+    WatchEvents events = 4;
+    
+    // Server sends periodic messages of progress even when no watches fire.
+    // The client knows it is caught up to a certain revision of the repository.
+    WatchProgress progress = 5; 
+  };
+};
+
+// Indicates that a watch was successfully created.
+message WatchCreated {
+  // Revision of the repository when the initial state was produced.
+  int64 current_revision = 1;
+}
+
+// IntialState is the state of the config subtree when watch begins.
+message InitialState {
+  // Entries in the initial state.
+  // A large initial state may be broken up into multiple messages.  
+  repeated ConfigFileEntry entries = 1;
+
+  // Last message from the initial state.
+  // If done == true, watch events will start streaming next.
+  bool done = 4;
+}
+
+// WatchEvents indicates that this message contains events from the watch stream.
+message WatchEvents {
+  // returns events for the specified watch id. 
+  repeated ConfigFileChange events = 4;
+}
+
+// WatchProgress message is sent periodically.
+message WatchProgress {
+  // Revision of the repository when this event was sent.
+  int64 current_revision = 1;
+}
+
+message ConfigFileEntry {
+  // File_id is a unique Id associated with the config file.
+  // Watcher should retain file_id so that it can be matched against
+  // ConfigFileChange events.
+  string file_id = 1;
+
+  ConfigFile file = 2;
+}

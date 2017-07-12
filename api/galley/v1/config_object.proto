@@ -81,7 +81,7 @@ message ConfigObject {
   // For example: route-rule corresponds to istio.proxy.v1.config.RouteRule.
   // schema_id is returned by the Validator / Transformer and it is stored with the object.
   // If a proto changes in a backwards incompatible way, it must get a new schema_id.
-  // Schema_id may contain sematic version information.
+  // Schema_id may contain semantic version information.
   string schema_id = 6;
 }
 

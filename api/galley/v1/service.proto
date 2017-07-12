@@ -152,6 +152,10 @@ message GetFileRequest{
 message DeleteFileRequest{
   // path of the config file from root.
   string path = 1; 
+
+  // Revision is used to avoid blind writes.
+  // The default (revision == 0) means allow blind writes.
+  int64 revision = 2;
 }
 
 // A view of configuration file stored at a location.
