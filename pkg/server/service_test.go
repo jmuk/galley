@@ -59,6 +59,7 @@ func (tm *testManager) createGrpcServer() (string, error) {
 func (tm *testManager) createGrpcClient(addr string) error {
 	conn, err := grpc.Dial(addr, grpc.WithInsecure())
 	if err != nil {
+		tm.close()
 		return err
 	}
 	tm.client = galleypb.NewGalleyClient(conn)
@@ -74,9 +75,7 @@ func (tm *testManager) setup() error {
 }
 
 func (tm *testManager) close() {
-	if tm.server != nil {
-		tm.server.GracefulStop()
-	}
+	tm.server.GracefulStop()
 }
 
 const testConfig = `
@@ -156,10 +155,10 @@ config:
 func TestCRUD(t *testing.T) {
 	tm := &testManager{}
 	err := tm.setup()
-	defer tm.close()
 	if err != nil {
 		t.Fatalf("failed to setup: %v", err)
 	}
+	defer tm.close()
 
 	p1 := "/dept1/svc1/service.cfg"
 	p2 := "/dept2/svc1/service.cfg"

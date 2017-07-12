@@ -15,7 +15,11 @@ go_library(
         "//api:galley/v1",
         "//pkg/store:go_default_library",
         "//pkg/store/inventory:go_default_library",
+        "@com_github_golang_glog//:go_default_library",
         "@com_github_golang_protobuf//proto:go_default_library",
+        "@com_github_golang_protobuf//ptypes/empty:go_default_library",
+        "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
+        "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes:go_default_library",
         "@org_golang_google_grpc//metadata:go_default_library",
         "@org_golang_google_grpc//status:go_default_library",
@@ -24,7 +28,7 @@ go_library(
 )
 
 go_test(
-    name = "small_tests",
+    name = "go_default_test",
     size = "small",
     srcs = [
         "marshaler_test.go",
@@ -32,7 +36,11 @@ go_test(
     ],
     library = ":go_default_library",
     deps = [
+        "//api:galley/v1",
         "//pkg/store/memstore:go_default_library",
         "@com_github_ghodss_yaml//:go_default_library",
+        "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//metadata:go_default_library",
     ],
 )

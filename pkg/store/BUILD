@@ -8,18 +8,12 @@ go_library(
         "builder.go",
         "store.go",
     ],
-    deps = [
-    ],
+    visibility = ["//visibility:public"],
 )
 
 go_test(
-    name = "small_tests",
+    name = "go_default_test",
     size = "small",
-    srcs = [
-        "builder_test.go",
-    ],
+    srcs = ["builder_test.go"],
     library = ":go_default_library",
-    deps = [
-        ":go_default_library",
-    ],
 )
