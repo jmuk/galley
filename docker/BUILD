@@ -7,7 +7,7 @@ pkg_tar(
     name = "galley_tar",
     extension = "tar.gz",
     files = [
-        "//cmd/gals:gals",
+        "//cmd/gals",
     ],
     mode = "0755",
     package_dir = "/usr/local/bin/",

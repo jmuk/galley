@@ -25,6 +25,7 @@ import (
 	"github.com/spf13/cobra/doc"
 
 	gals "istio.io/galley/cmd/gals/cmd"
+	istioctl "istio.io/galley/cmd/istioctl/cmd"
 	"istio.io/galley/cmd/shared"
 )
 
@@ -53,6 +54,7 @@ func GetRootCmd(args []string, printf, fatalf shared.FormatFn) *cobra.Command {
 func work(printf, fatalf shared.FormatFn, outputDir string) {
 	roots := []*cobra.Command{
 		gals.GetRootCmd(nil),
+		istioctl.GetRootCmd(nil),
 	}
 
 	printf("Outputting Galley CLI collateral files to %s", outputDir)
