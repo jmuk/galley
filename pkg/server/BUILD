@@ -9,6 +9,7 @@ go_library(
         "marshaler.go",
         "service.go",
         "util.go",
+        "watcher.go",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -38,6 +39,7 @@ go_test(
         "marshaler_test.go",
         "service_test.go",
         "util_test.go",
+        "watcher_test.go",
     ],
     library = ":go_default_library",
     deps = [

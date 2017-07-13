@@ -16,8 +16,6 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"net"
 	"reflect"
 	"testing"
 
@@ -28,60 +26,37 @@ import (
 	"google.golang.org/grpc/status"
 
 	galleypb "istio.io/galley/api/galley/v1"
-	"istio.io/galley/pkg/store/memstore"
+	"istio.io/galley/pkg/store"
 )
 
-type testManager struct {
+type galleyTestManager struct {
+	*testManager
 	client galleypb.GalleyClient
-	s      *memstore.Store
-	server *grpc.Server
 }
 
-func (tm *testManager) createGrpcServer() (string, error) {
-	tm.s = memstore.New()
-	svc, err := NewGalleyService(tm.s)
+func (tm *galleyTestManager) registerGrpcServer(s store.Store, server *grpc.Server) error {
+	svc, err := NewGalleyService(s)
 	if err != nil {
-		return "", err
-	}
-
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", 0))
-	if err != nil {
-		return "", fmt.Errorf("unable to listen on socket: %v", err)
-	}
-
-	tm.server = grpc.NewServer()
-	galleypb.RegisterGalleyServer(tm.server, svc)
-
-	go func() {
-		_ = tm.server.Serve(listener)
-	}()
-	return listener.Addr().String(), nil
-}
-
-func (tm *testManager) createGrpcClient(addr string) error {
-	conn, err := grpc.Dial(addr, grpc.WithInsecure())
-	if err != nil {
-		tm.close()
 		return err
 	}
+
+	galleypb.RegisterGalleyServer(server, svc)
+	return nil
+}
+
+func (tm *galleyTestManager) createGrpcClient(conn *grpc.ClientConn) error {
 	tm.client = galleypb.NewGalleyClient(conn)
 	return nil
 }
 
-func (tm *testManager) setup() error {
-	addr, err := tm.createGrpcServer()
-	if err != nil {
-		return err
-	}
-	return tm.createGrpcClient(addr)
-}
-
-func (tm *testManager) close() {
-	tm.server.GracefulStop()
+func newGalleyTestManager() *galleyTestManager {
+	mgr := &galleyTestManager{}
+	mgr.testManager = &testManager{grpcTestManager: mgr}
+	return mgr
 }
 
 func TestCRUD(t *testing.T) {
-	tm := &testManager{}
+	tm := newGalleyTestManager()
 	err := tm.setup()
 	if err != nil {
 		t.Fatalf("failed to setup: %v", err)

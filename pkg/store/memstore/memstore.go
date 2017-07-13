@@ -17,7 +17,6 @@ package memstore
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -26,11 +25,19 @@ import (
 	"istio.io/galley/pkg/store"
 )
 
+type watcher struct {
+	id     int
+	prefix string
+	ch     chan store.Event
+}
+
 // Store implements store.Store.
 type Store struct {
-	mu       sync.RWMutex
-	data     map[string][]byte
-	revision int64
+	mu            sync.RWMutex
+	data          map[string][]byte
+	revision      int64
+	watchers      map[int]*watcher
+	nextWatcherID int
 }
 
 // String implements fmt.Stringer interface.
@@ -58,7 +65,7 @@ func (ms *Store) Get(ctx context.Context, key string) ([]byte, int64, error) {
 func (ms *Store) List(ctx context.Context, prefix string) (map[string][]byte, int64, error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
-	if !strings.HasSuffix(prefix, "/") {
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
 		prefix = prefix + "/"
 	}
 
@@ -69,6 +76,21 @@ func (ms *Store) List(ctx context.Context, prefix string) (map[string][]byte, in
 		}
 	}
 	return results, ms.revision, nil
+}
+
+func (ms *Store) dispatchWatchEvents(t store.EventType, key string, value, prevValue []byte, revision int64) {
+	for _, w := range ms.watchers {
+		if !strings.HasPrefix(key, w.prefix) {
+			continue
+		}
+		w.ch <- store.Event{
+			Type:          t,
+			Key:           key,
+			Value:         value,
+			PreviousValue: prevValue,
+			Revision:      revision,
+		}
+	}
 }
 
 // Set implements store.Writer interface.
@@ -82,8 +104,10 @@ func (ms *Store) Set(ctx context.Context, key string, value []byte, revision int
 			ActualRevision:   ms.revision,
 		}
 	}
+	prevValue := ms.data[key]
 	ms.data[key] = value
 	ms.revision++
+	ms.dispatchWatchEvents(store.PUT, key, value, prevValue, ms.revision)
 	return ms.revision, nil
 }
 
@@ -91,18 +115,34 @@ func (ms *Store) Set(ctx context.Context, key string, value []byte, revision int
 func (ms *Store) Delete(ctx context.Context, key string) (int64, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
-	if _, ok := ms.data[key]; !ok {
+	prevValue, ok := ms.data[key]
+	if !ok {
 		return ms.revision, store.ErrNotFound
 	}
 	delete(ms.data, key)
 	ms.revision++
+	ms.dispatchWatchEvents(store.DELETE, key, nil, prevValue, ms.revision)
 	return ms.revision, nil
+}
+
+func (ms *Store) waitWatch(ctx context.Context, w *watcher) {
+	<-ctx.Done()
+	close(w.ch)
+
+	ms.mu.Lock()
+	delete(ms.watchers, w.id)
+	ms.mu.Unlock()
 }
 
 // Watch implements store.Watcher interface.
 func (ms *Store) Watch(ctx context.Context, key string, revision int64) (<-chan store.Event, error) {
-	// not implemented yet.
-	return nil, errors.New("not implemented")
+	ms.mu.Lock()
+	w := &watcher{ms.nextWatcherID, key, make(chan store.Event)}
+	ms.nextWatcherID++
+	ms.watchers[w.id] = w
+	go ms.waitWatch(ctx, w)
+	ms.mu.Unlock()
+	return w.ch, nil
 }
 
 // New creates a new instance of Store.
@@ -110,6 +150,7 @@ func New() *Store {
 	return &Store{
 		data:     map[string][]byte{},
 		revision: 0,
+		watchers: map[int]*watcher{},
 	}
 }
 

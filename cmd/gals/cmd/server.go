@@ -15,6 +15,8 @@
 package cmd
 
 import (
+	"time"
+
 	"github.com/spf13/cobra"
 
 	"istio.io/galley/cmd/shared"
@@ -22,9 +24,10 @@ import (
 )
 
 type serverArgs struct {
-	storeURL string
-	grpcPort uint16
-	restPort uint16
+	storeURL        string
+	grpcPort        uint16
+	restPort        uint16
+	watcherInterval time.Duration
 }
 
 func serverCmd(printf, fatalf shared.FormatFn) *cobra.Command {
@@ -42,11 +45,12 @@ func serverCmd(printf, fatalf shared.FormatFn) *cobra.Command {
 	serverCmd.PersistentFlags().Uint16Var(&sa.grpcPort, "port", 9096, "Galley API port for gRPC")
 	serverCmd.PersistentFlags().Uint16Var(&sa.restPort, "rest-port", 9097, "the port JSON/REST gateway to the Galley API")
 	serverCmd.PersistentFlags().StringVar(&sa.storeURL, "store-url", "", "the URL for the backend storage")
+	serverCmd.PersistentFlags().DurationVar(&sa.watcherInterval, "watcher-interval", time.Second*5, "the interval for emitting watch events")
 	return &serverCmd
 }
 
 func runServer(sa *serverArgs, printf, fatalf shared.FormatFn) {
-	osb, err := server.CreateServer(sa.storeURL)
+	osb, err := server.CreateServer(sa.storeURL, sa.watcherInterval)
 	if err != nil {
 		fatalf("Failed to create server: %s", err.Error())
 	}

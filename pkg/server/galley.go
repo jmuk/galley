@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -36,11 +37,11 @@ const maxMessageSize uint = 1024 * 1024
 // Server data
 type Server struct {
 	c *GalleyService
-	// TODO: watcher should be added.
+	w *WatcherServer
 }
 
 // CreateServer creates a galley server.
-func CreateServer(url string) (*Server, error) {
+func CreateServer(url string, watchInterval time.Duration) (*Server, error) {
 	kvs, err := store.NewRegistrar(inventory.NewInventory()).NewStore(url)
 	if err != nil {
 		return nil, err
@@ -49,7 +50,11 @@ func CreateServer(url string) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{c}, nil
+	w, err := NewWatcherServer(kvs, watchInterval)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{c, w}, nil
 }
 
 func (s *Server) startGateway(grpcPort, restPort uint16) error {
@@ -109,6 +114,7 @@ func (s *Server) Start(grpcPort, restPort uint16) error {
 	// }
 	gs := grpc.NewServer(grpcOptions...)
 	galleypb.RegisterGalleyServer(gs, s.c)
+	galleypb.RegisterWatcherServer(gs, s.w)
 
 	return gs.Serve(listener)
 }

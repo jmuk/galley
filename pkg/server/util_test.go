@@ -25,13 +25,29 @@ import (
 	galleypb "istio.io/galley/api/galley/v1"
 )
 
+func TestGetPrefix(t *testing.T) {
+	for _, cc := range []struct {
+		input string
+		want  string
+	}{
+		{"shipping.example.com", "com/example/shipping/"},
+		{"foo", "foo/"},
+		{"", ""},
+	} {
+		got := getPrefix(cc.input)
+		if got != cc.want {
+			t.Errorf("Got %s, Want %s", got, cc.want)
+		}
+	}
+}
+
 func TestNewConfigFile(t *testing.T) {
 	yamlConfig := []byte(testConfig)
 	jsonConfig, err := yaml.YAMLToJSON(yamlConfig)
 	if err != nil {
 		t.Fatalf("failed to convert yaml data: %v", err)
 	}
-	configFile, _, err := newConfigFileForTest(testConfig)
+	configFile, err := newConfigFile(testConfig, galleypb.ContentType_YAML)
 	if err != nil {
 		t.Fatalf("failed to convert get the config file: %v", err)
 	}

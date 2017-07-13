@@ -24,10 +24,14 @@ func testManagerBuilder() (*testutil.TestManager, error) {
 	return testutil.NewTestManager(New(), nil), nil
 }
 
-func TestEtcdStore(t *testing.T) {
+func TestMemStore(t *testing.T) {
 	testutil.RunStoreTest(t, testManagerBuilder)
 }
 
-func TestEtcdOptimisticConcurrency(t *testing.T) {
+func TestMemstoreOptimisticConcurrency(t *testing.T) {
 	testutil.RunOptimisticConcurrency(t, testManagerBuilder)
+}
+
+func TestMemstoreWatcher(t *testing.T) {
+	testutil.RunWatcherTest(t, testManagerBuilder)
 }

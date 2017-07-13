@@ -15,6 +15,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"strconv"
 	"strings"
@@ -48,6 +49,19 @@ func normalizePath(path string) string {
 	return path
 }
 
+func getPrefix(scope string) string {
+	if scope == "" {
+		return scope
+	}
+	segments := strings.Split(scope, ".")
+	buf := bytes.NewBuffer(nil)
+	for i := len(segments) - 1; i >= 0; i-- {
+		buf.WriteString(segments[i])
+		buf.WriteString("/")
+	}
+	return buf.String()
+}
+
 func sendFileHeader(ctx context.Context, file *galleypb.File) error {
 	return grpc.SendHeader(ctx, metadata.Pairs(
 		"file-path", file.Path,
@@ -66,6 +80,14 @@ func getFile(ctx context.Context, s store.Store, path string) (*galleypb.File, e
 	}
 	ifile.RawFile.Revision = revision
 	return ifile.RawFile, nil
+}
+
+func getConfigFile(value []byte) (*galleypb.ConfigFile, error) {
+	ifile := &internalpb.File{}
+	if err := proto.Unmarshal(value, ifile); err != nil {
+		return nil, err
+	}
+	return ifile.Encoded, nil
 }
 
 func newConfigFile(source string, ctype galleypb.ContentType) (*galleypb.ConfigFile, error) {

@@ -39,6 +39,8 @@ go_proto_compile(
     protos = [
         ":galley_core_protos",
         "galley/v1/service.proto",
+        "galley/v1/validator.proto",
+        "galley/v1/watcher.proto",
     ],
     verbose = 0,
     visibility = ["//visibility:public"],

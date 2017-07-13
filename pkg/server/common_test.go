@@ -15,15 +15,60 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
+	"net"
 
-	"github.com/ghodss/yaml"
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/grpc"
 
-	galleypb "istio.io/galley/api/galley/v1"
+	"istio.io/galley/pkg/store"
+	"istio.io/galley/pkg/store/memstore"
 )
+
+type grpcTestManager interface {
+	registerGrpcServer(s store.Store, server *grpc.Server) error
+	createGrpcClient(conn *grpc.ClientConn) error
+}
+
+type testManager struct {
+	grpcTestManager
+	s      *memstore.Store
+	server *grpc.Server
+}
+
+func (tm *testManager) createGrpcServer() (string, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", 0))
+	if err != nil {
+		return "", fmt.Errorf("unable to listen on socket: %v", err)
+	}
+
+	tm.s = memstore.New()
+	tm.server = grpc.NewServer()
+	if err = tm.registerGrpcServer(tm.s, tm.server); err != nil {
+		return "", fmt.Errorf("unable to register the server: %v", err)
+	}
+
+	go func() {
+		_ = tm.server.Serve(listener)
+	}()
+	return listener.Addr().String(), nil
+}
+
+func (tm *testManager) setup() error {
+	addr, err := tm.createGrpcServer()
+	if err != nil {
+		return err
+	}
+	conn, err := grpc.Dial(addr, grpc.WithInsecure())
+	if err != nil {
+		tm.close()
+		return err
+	}
+	return tm.createGrpcClient(conn)
+}
+
+func (tm *testManager) close() {
+	tm.server.GracefulStop()
+}
 
 const testConfig = `
 scope: shipping.FQDN
@@ -98,19 +143,3 @@ config:
           version: v1
         weight: 100
 `
-
-func newConfigFileForTest(fileContent string) (*galleypb.ConfigFile, []byte, error) {
-	configFile := &galleypb.ConfigFile{}
-	jsonData, err := yaml.YAMLToJSON([]byte(fileContent))
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to convert into json: %v", err)
-	}
-	if err = jsonpb.Unmarshal(bytes.NewBuffer(jsonData), configFile); err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal: %v", err)
-	}
-	configBytes, err := proto.Marshal(configFile)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to marshal: %v", err)
-	}
-	return configFile, configBytes, nil
-}
