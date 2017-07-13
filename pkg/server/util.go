@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ghodss/yaml"
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -26,6 +28,20 @@ import (
 	galleypb "istio.io/galley/api/galley/v1"
 	"istio.io/galley/pkg/store"
 )
+
+func rawPath(path string) string {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return "/raw" + path
+}
+
+func encodedPath(path string) string {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return "/encoded" + path
+}
 
 func sendFileHeader(ctx context.Context, file *galleypb.File) error {
 	return grpc.SendHeader(ctx, metadata.Pairs(
@@ -35,7 +51,7 @@ func sendFileHeader(ctx context.Context, file *galleypb.File) error {
 }
 
 func getFile(ctx context.Context, s store.Store, path string) (*galleypb.File, error) {
-	value, revision, err := s.Get(ctx, path+":raw")
+	value, revision, err := s.Get(ctx, rawPath(path))
 	if err != nil {
 		return nil, err
 	}
@@ -47,17 +63,38 @@ func getFile(ctx context.Context, s store.Store, path string) (*galleypb.File, e
 	return file, nil
 }
 
+func newConfigFile(source string, ctype galleypb.ContentType) (*galleypb.ConfigFile, error) {
+	if ctype == galleypb.ContentType_UNKNOWN || ctype == galleypb.ContentType_YAML {
+		jsonSource, err := yaml.YAMLToJSON([]byte(source))
+		if err == nil {
+			source = string(jsonSource)
+			ctype = galleypb.ContentType_JSON
+		} else if ctype == galleypb.ContentType_YAML {
+			return nil, err
+		}
+	}
+	file := &galleypb.ConfigFile{}
+	if ctype == galleypb.ContentType_UNKNOWN || ctype == galleypb.ContentType_JSON {
+		if err := jsonpb.UnmarshalString(source, file); err == nil {
+			return file, nil
+		} else if ctype == galleypb.ContentType_JSON {
+			return nil, err
+		}
+	}
+	if err := proto.UnmarshalText(source, file); err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
 func readFiles(ctx context.Context, s store.Store, prefix string) ([]*galleypb.File, int64, error) {
-	data, revision, err := s.List(ctx, prefix)
+	data, revision, err := s.List(ctx, rawPath(prefix))
 	if err != nil {
 		return nil, 0, err
 	}
 
 	files := make([]*galleypb.File, 0, len(data))
-	for path, value := range data {
-		if !strings.HasSuffix(path, ":raw") {
-			continue
-		}
+	for _, value := range data {
 		file := &galleypb.File{}
 		if err = proto.Unmarshal(value, file); err != nil {
 			return nil, 0, err

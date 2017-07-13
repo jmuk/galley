@@ -15,6 +15,7 @@ go_library(
         "//api:galley/v1",
         "//pkg/store:go_default_library",
         "//pkg/store/inventory:go_default_library",
+        "@com_github_ghodss_yaml//:go_default_library",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_golang_protobuf//proto:go_default_library",
         "@com_github_golang_protobuf//ptypes/empty:go_default_library",
@@ -33,6 +34,8 @@ go_test(
     srcs = [
         "marshaler_test.go",
         "service_test.go",
+        "testcommon.go",
+        "util_test.go",
     ],
     library = ":go_default_library",
     deps = [
