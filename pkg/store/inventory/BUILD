@@ -9,5 +9,6 @@ go_library(
     deps = [
         "//pkg/store:go_default_library",
         "//pkg/store/etcd:go_default_library",
+        "//pkg/store/memstore:go_default_library",
     ],
 )

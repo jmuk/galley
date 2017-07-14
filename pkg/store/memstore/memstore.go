@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -106,5 +107,12 @@ func New() *Store {
 	return &Store{
 		data:     map[string][]byte{},
 		revision: 0,
+	}
+}
+
+// Register registers memory scheme as the store backend.
+func Register(m map[string]store.Builder) {
+	m["memory"] = func(u *url.URL) (store.Store, error) {
+		return New(), nil
 	}
 }
