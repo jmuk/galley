@@ -46,7 +46,7 @@ type Store interface {
 
 // ErrNotFound is an error which can be used to express that the underlying
 // storage works well but simply the value is missing.
-var ErrNotFound error = fmt.Errorf("not found")
+var ErrNotFound = fmt.Errorf("not found")
 
 // RevisionMismatchError should be returned on Set method when the
 // specified revision doesn't satisfy the expectation.
