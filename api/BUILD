@@ -14,6 +14,11 @@ filegroup(
     ],
 )
 
+filegroup(
+    name = "service_proto",
+    srcs = ["galley/v1/service.proto"],
+)
+
 go_proto_compile(
     name = "galley/v1_pb",
     importmap = {

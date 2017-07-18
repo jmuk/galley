@@ -16,6 +16,7 @@
 package server
 
 import (
+	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	"golang.org/x/net/context"
@@ -23,6 +24,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	galleypb "istio.io/galley/api/galley/v1"
+	internalpb "istio.io/galley/pkg/server/internal"
 	"istio.io/galley/pkg/store"
 )
 
@@ -61,14 +63,24 @@ func (s *GalleyService) ListFiles(ctx context.Context, req *galleypb.ListFilesRe
 }
 
 func (s *GalleyService) createOrUpdate(ctx context.Context, file *galleypb.File, ctype galleypb.ContentType) (*galleypb.File, error) {
-	bytes, err := proto.Marshal(file)
+	ifile := &internalpb.File{RawFile: file}
+
+	cfile, err := newConfigFile(file.Contents, ctype)
 	if err != nil {
-		return nil, err
+		glog.V(3).Infof("the file contents can't be parsed as ConfigFile message: %v", err)
 	}
-	// TODO: parse the contents accoding to ctype, and then store the parsed data for watchers.
-	// TODO: validate the contents, invoke validation servers.
-	// Maybe we want to store parsed data (i.e. ConfigFile message) separately, using ":raw" suffix for this reason.
-	file.Revision, err = s.s.Set(ctx, file.Path+":raw", bytes, -1 /* revision */)
+	if cfile != nil {
+		// TODO: use File's metadata? see https://github.com/istio/galley/issues/55
+		cfile.ServerMetadata = &galleypb.ServerMetadata{Path: file.Path}
+		// TODO: validate the config file, invoke validation servers.
+		ifile.Encoded = cfile
+	}
+
+	var bytes []byte
+	if bytes, err = proto.Marshal(ifile); err != nil {
+		return nil, status.New(codes.InvalidArgument, "can't marshal the request").Err()
+	}
+	file.Revision, err = s.s.Set(ctx, file.Path, bytes, -1 /* revision */)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +109,7 @@ func (s *GalleyService) UpdateFile(ctx context.Context, req *galleypb.UpdateFile
 // DeleteFile implements galleypb.Galley interface.
 func (s *GalleyService) DeleteFile(ctx context.Context, req *galleypb.DeleteFileRequest) (*empty.Empty, error) {
 	// TODO: validation.
-	_, err := s.s.Delete(ctx, req.Path+":raw")
+	_, err := s.s.Delete(ctx, req.Path)
 	if err != nil {
 		return nil, err
 	}
