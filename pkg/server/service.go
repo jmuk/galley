@@ -66,8 +66,8 @@ func (s *GalleyService) createOrUpdate(ctx context.Context, file *galleypb.File,
 	ifile := &internalpb.File{RawFile: file}
 
 	cfile, err := newConfigFile(file.Contents, ctype)
-	if err != nil && glog.V(3) {
-		glog.Infof("the file contents can't be parsed as ConfigFile message: %v", err)
+	if err != nil {
+		glog.V(3).Infof("the file contents can't be parsed as ConfigFile message: %v", err)
 	}
 	if cfile != nil {
 		// TODO: use File's metadata? see https://github.com/istio/galley/issues/55
