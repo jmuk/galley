@@ -17,8 +17,10 @@ package server
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/ghodss/yaml"
+	"github.com/golang/glog"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
@@ -28,6 +30,23 @@ import (
 	internalpb "istio.io/galley/pkg/server/internal"
 	"istio.io/galley/pkg/store"
 )
+
+// normalizePath normalizes the path -- especially removing leading and trailing
+// slashes.
+func normalizePath(path string) string {
+	if strings.HasSuffix(path, "/") {
+		glog.V(2).Infof("path %s ends with /", path)
+	}
+	path = strings.Trim(path, "/")
+	if glog.V(2) {
+		lastSlash := strings.LastIndex(path, "/")
+		lastDot := strings.LastIndex(path, ".")
+		if lastDot < 0 || lastDot < lastSlash {
+			glog.Infof("extensions not found in path %s", path)
+		}
+	}
+	return path
+}
 
 func sendFileHeader(ctx context.Context, file *galleypb.File) error {
 	return grpc.SendHeader(ctx, metadata.Pairs(
