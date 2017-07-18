@@ -132,10 +132,6 @@ func TestCRUD(t *testing.T) {
 	if len(rev) != 1 {
 		t.Errorf("Unexpected revision data: %+v", rev)
 	}
-	_, _, err = tm.s.Get(ctx, encodedPath(p1))
-	if err != nil {
-		t.Errorf("can't find the encoded data: %v", err)
-	}
 
 	_, err = tm.client.CreateFile(ctx, &galleypb.CreateFileRequest{
 		Path:     p2,
@@ -181,9 +177,6 @@ func TestCRUD(t *testing.T) {
 	file, err = tm.client.GetFile(ctx, &galleypb.GetFileRequest{Path: p1})
 	if err == nil {
 		t.Errorf("Unexpectedly get %s: %+v", p1, file)
-	}
-	if _, _, err = tm.s.Get(ctx, encodedPath(p1)); err == nil {
-		t.Errorf("encoded data is not deleted")
 	}
 	_, err = tm.client.DeleteFile(ctx, &galleypb.DeleteFileRequest{Path: p2})
 	if err != nil {

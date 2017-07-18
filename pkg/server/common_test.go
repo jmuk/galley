@@ -25,7 +25,6 @@ import (
 	galleypb "istio.io/galley/api/galley/v1"
 )
 
-// nolint: deadcode
 const testConfig = `
 scope: shipping.FQDN
 name: service.cfg
@@ -100,7 +99,6 @@ config:
         weight: 100
 `
 
-// nolint: deadcode
 func newConfigFileForTest(fileContent string) (*galleypb.ConfigFile, []byte, error) {
 	configFile := &galleypb.ConfigFile{}
 	jsonData, err := yaml.YAMLToJSON([]byte(fileContent))

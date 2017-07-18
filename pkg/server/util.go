@@ -17,7 +17,6 @@ package server
 import (
 	"context"
 	"strconv"
-	"strings"
 
 	"github.com/ghodss/yaml"
 	"github.com/golang/protobuf/jsonpb"
@@ -26,22 +25,9 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	galleypb "istio.io/galley/api/galley/v1"
+	internalpb "istio.io/galley/pkg/server/internal"
 	"istio.io/galley/pkg/store"
 )
-
-func rawPath(path string) string {
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return "/raw" + path
-}
-
-func encodedPath(path string) string {
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return "/encoded" + path
-}
 
 func sendFileHeader(ctx context.Context, file *galleypb.File) error {
 	return grpc.SendHeader(ctx, metadata.Pairs(
@@ -51,16 +37,16 @@ func sendFileHeader(ctx context.Context, file *galleypb.File) error {
 }
 
 func getFile(ctx context.Context, s store.Store, path string) (*galleypb.File, error) {
-	value, revision, err := s.Get(ctx, rawPath(path))
+	value, revision, err := s.Get(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	file := &galleypb.File{}
-	if err = proto.Unmarshal(value, file); err != nil {
+	ifile := &internalpb.File{}
+	if err = proto.Unmarshal(value, ifile); err != nil {
 		return nil, err
 	}
-	file.Revision = revision
-	return file, nil
+	ifile.RawFile.Revision = revision
+	return ifile.RawFile, nil
 }
 
 func newConfigFile(source string, ctype galleypb.ContentType) (*galleypb.ConfigFile, error) {
@@ -88,18 +74,19 @@ func newConfigFile(source string, ctype galleypb.ContentType) (*galleypb.ConfigF
 }
 
 func readFiles(ctx context.Context, s store.Store, prefix string) ([]*galleypb.File, int64, error) {
-	data, revision, err := s.List(ctx, rawPath(prefix))
+	data, revision, err := s.List(ctx, prefix)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	files := make([]*galleypb.File, 0, len(data))
 	for _, value := range data {
-		file := &galleypb.File{}
-		if err = proto.Unmarshal(value, file); err != nil {
+		ifile := &internalpb.File{}
+		if err = proto.Unmarshal(value, ifile); err != nil {
 			return nil, 0, err
 		}
-		files = append(files, file)
+		ifile.RawFile.Revision = revision
+		files = append(files, ifile.RawFile)
 	}
 	return files, revision, nil
 }

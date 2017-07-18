@@ -12,11 +12,13 @@ go_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "//api:galley/v1",
+        "//api:galley/v1",  # keep
+        "//pkg/server/internal:go_default_library",
         "//pkg/store:go_default_library",
         "//pkg/store/inventory:go_default_library",
         "@com_github_ghodss_yaml//:go_default_library",
         "@com_github_golang_glog//:go_default_library",
+        "@com_github_golang_protobuf//jsonpb:go_default_library",
         "@com_github_golang_protobuf//proto:go_default_library",
         "@com_github_golang_protobuf//ptypes/empty:go_default_library",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
@@ -32,16 +34,18 @@ go_test(
     name = "go_default_test",
     size = "small",
     srcs = [
+        "common_test.go",
         "marshaler_test.go",
         "service_test.go",
-        "testcommon.go",
         "util_test.go",
     ],
     library = ":go_default_library",
     deps = [
-        "//api:galley/v1",
+        "//api:galley/v1",  # keep
         "//pkg/store/memstore:go_default_library",
         "@com_github_ghodss_yaml//:go_default_library",
+        "@com_github_golang_protobuf//jsonpb:go_default_library",
+        "@com_github_golang_protobuf//proto:go_default_library",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//metadata:go_default_library",

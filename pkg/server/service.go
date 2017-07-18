@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	galleypb "istio.io/galley/api/galley/v1"
+	internalpb "istio.io/galley/pkg/server/internal"
 	"istio.io/galley/pkg/store"
 )
 
@@ -62,10 +63,7 @@ func (s *GalleyService) ListFiles(ctx context.Context, req *galleypb.ListFilesRe
 }
 
 func (s *GalleyService) createOrUpdate(ctx context.Context, file *galleypb.File, ctype galleypb.ContentType) (*galleypb.File, error) {
-	bytes, err := proto.Marshal(file)
-	if err != nil {
-		return nil, status.New(codes.InvalidArgument, err.Error()).Err()
-	}
+	ifile := &internalpb.File{RawFile: file}
 
 	cfile, err := newConfigFile(file.Contents, ctype)
 	if err != nil && glog.V(3) {
@@ -75,21 +73,16 @@ func (s *GalleyService) createOrUpdate(ctx context.Context, file *galleypb.File,
 		// TODO: use File's metadata? see https://github.com/istio/galley/issues/55
 		cfile.ServerMetadata = &galleypb.ServerMetadata{Path: file.Path}
 		// TODO: validate the config file, invoke validation servers.
+		ifile.Encoded = cfile
 	}
-	file.Revision, err = s.s.Set(ctx, rawPath(file.Path), bytes, -1 /* revision */)
+
+	var bytes []byte
+	if bytes, err = proto.Marshal(ifile); err != nil {
+		return nil, status.New(codes.InvalidArgument, "can't marshal the request").Err()
+	}
+	file.Revision, err = s.s.Set(ctx, file.Path, bytes, -1 /* revision */)
 	if err != nil {
 		return nil, err
-	}
-	if cfile != nil {
-		cfile.ServerMetadata.Revision = file.Revision + 1
-		var cbytes []byte
-		cbytes, err = proto.Marshal(cfile)
-		if err != nil {
-			return nil, status.New(codes.InvalidArgument, err.Error()).Err()
-		}
-		if _, err = s.s.Set(ctx, encodedPath(file.Path), cbytes, -1 /* revision */); err != nil {
-			return nil, err
-		}
 	}
 	if err = sendFileHeader(ctx, file); err != nil {
 		return nil, err
@@ -116,11 +109,7 @@ func (s *GalleyService) UpdateFile(ctx context.Context, req *galleypb.UpdateFile
 // DeleteFile implements galleypb.Galley interface.
 func (s *GalleyService) DeleteFile(ctx context.Context, req *galleypb.DeleteFileRequest) (*empty.Empty, error) {
 	// TODO: validation.
-	_, err := s.s.Delete(ctx, rawPath(req.Path))
-	if err != nil {
-		return nil, err
-	}
-	_, err = s.s.Delete(ctx, encodedPath(req.Path))
+	_, err := s.s.Delete(ctx, req.Path)
 	if err != nil {
 		return nil, err
 	}
