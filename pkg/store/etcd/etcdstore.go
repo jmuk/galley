@@ -54,10 +54,7 @@ func (es *Store) Close() error {
 }
 
 func normalizeKey(key string) string {
-	if !strings.HasPrefix(key, "/") {
-		return "/" + key
-	}
-	return key
+	return "/" + key
 }
 
 // Get implements store.Reader interface.
@@ -88,7 +85,7 @@ func (es *Store) List(ctx context.Context, prefix string) (map[string][]byte, in
 	}
 	data := map[string][]byte{}
 	for _, kvs := range resp.Kvs {
-		data[string(kvs.Key)] = kvs.Value
+		data[string(kvs.Key[1:])] = kvs.Value
 	}
 	return data, resp.Header.Revision, nil
 }
@@ -144,7 +141,8 @@ func (es *Store) Watch(ctx context.Context, key string, revision int64) (<-chan 
 			for _, ev := range resp.Events {
 				sev := store.Event{
 					Revision: resp.Header.Revision,
-					Key:      string(ev.Kv.Key),
+					// Key is normalized, i.e. always starts with /. This should be removed.
+					Key: string(ev.Kv.Key[1:]),
 				}
 				if ev.Type == mvccpb.PUT {
 					sev.Type = store.PUT

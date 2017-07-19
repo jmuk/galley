@@ -87,7 +87,7 @@ func TestCRUD(t *testing.T) {
 	defer tm.close()
 
 	p1 := "/dept1/svc1/service.cfg"
-	p2 := "/dept2/svc1/service.cfg"
+	p2 := "dept2/svc1/service.cfg"
 	ctx := context.Background()
 	file, err := tm.client.GetFile(ctx, &galleypb.GetFileRequest{Path: p1})
 	if err == nil {
@@ -115,15 +115,15 @@ func TestCRUD(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to get the file: %v", err)
 	}
-	if file.Path != p1 || file.Contents != testConfig {
+	if file.Path != p1[1:] || file.Contents != testConfig {
 		t.Errorf("Got %v, Want %v", file, &galleypb.File{Path: p1, Contents: testConfig})
 	}
 	path, ok := header["file-path"]
 	if !ok {
 		t.Errorf("file-path not found in header")
 	}
-	if !reflect.DeepEqual(path, []string{p1}) {
-		t.Errorf("Got %+v, Want %+v", path, []string{p1})
+	if !reflect.DeepEqual(path, []string{p1[1:]}) {
+		t.Errorf("Got %+v, Want %+v", path, []string{p1[1:]})
 	}
 	rev, ok := header["file-revision"]
 	if !ok {
@@ -166,7 +166,7 @@ func TestCRUD(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to list files: %v", err)
 	}
-	if len(resp.Entries) != 1 || resp.Entries[0].Path != p1 || resp.Entries[0].Contents != testConfig {
+	if len(resp.Entries) != 1 || resp.Entries[0].Path != p1[1:] || resp.Entries[0].Contents != testConfig {
 		t.Errorf("Unexpected list result: %+v", resp)
 	}
 
