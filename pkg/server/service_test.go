@@ -104,7 +104,7 @@ func TestCRUD(t *testing.T) {
 
 	_, err = tm.client.CreateFile(ctx, &galleypb.CreateFileRequest{
 		Path:     p1,
-		Contents: testConfig,
+		Contents: []byte(testConfig),
 	})
 	if err != nil {
 		t.Errorf("Falied to create the file %s: %+v", p1, err)
@@ -115,8 +115,8 @@ func TestCRUD(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to get the file: %v", err)
 	}
-	if file.Path != p1[1:] || file.Contents != testConfig {
-		t.Errorf("Got %v, Want %v", file, &galleypb.File{Path: p1, Contents: testConfig})
+	if file.Path != p1[1:] || string(file.Contents) != testConfig {
+		t.Errorf("Got %v, Want %v", file, &galleypb.File{Path: p1, Contents: []byte(testConfig)})
 	}
 	path, ok := header["file-path"]
 	if !ok {
@@ -135,7 +135,7 @@ func TestCRUD(t *testing.T) {
 
 	_, err = tm.client.CreateFile(ctx, &galleypb.CreateFileRequest{
 		Path:     p2,
-		Contents: testConfig,
+		Contents: []byte(testConfig),
 	})
 	if err != nil {
 		t.Errorf("Failed to create the file %s: %v", p2, err)
@@ -147,7 +147,7 @@ func TestCRUD(t *testing.T) {
 	}
 	_, err = tm.client.UpdateFile(ctx, &galleypb.UpdateFileRequest{
 		Path:        p2,
-		Contents:    string(jsonData),
+		Contents:    jsonData,
 		ContentType: galleypb.ContentType_JSON,
 	})
 	if err != nil {
@@ -158,15 +158,15 @@ func TestCRUD(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to get the file %s: %v", p2, err)
 	}
-	if file.Contents != string(jsonData) {
-		t.Errorf("Got %s, Want %s", file.Contents, string(jsonData))
+	if string(file.Contents) != string(jsonData) {
+		t.Errorf("Got %s, Want %s", file.Contents, jsonData)
 	}
 
 	resp, err = tm.client.ListFiles(ctx, &galleypb.ListFilesRequest{Path: "/dept1", IncludeContents: true})
 	if err != nil {
 		t.Errorf("Failed to list files: %v", err)
 	}
-	if len(resp.Entries) != 1 || resp.Entries[0].Path != p1[1:] || resp.Entries[0].Contents != testConfig {
+	if len(resp.Entries) != 1 || resp.Entries[0].Path != p1[1:] || string(resp.Entries[0].Contents) != testConfig {
 		t.Errorf("Unexpected list result: %+v", resp)
 	}
 

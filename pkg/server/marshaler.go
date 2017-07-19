@@ -63,9 +63,8 @@ func (d *contentsEncoder) Encode(v interface{}) error {
 	}
 	// TODO: maybe we should format the contents among yaml<->json
 	// based on the file contents and the response content type.
-	bytes := []byte(f.Contents)
-	for written := 0; written < len(bytes); {
-		n, err := d.w.Write(bytes[written:])
+	for written := 0; written < len(f.Contents); {
+		n, err := d.w.Write(f.Contents[written:])
 		if err != nil {
 			return err
 		}

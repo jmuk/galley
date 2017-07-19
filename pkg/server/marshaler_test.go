@@ -89,19 +89,19 @@ func TestContentEncoder(t *testing.T) {
 	}{
 		{
 			"file",
-			&galleypb.File{Contents: "foo bar", Revision: 1, Path: "foo/bar"},
+			&galleypb.File{Contents: []byte("foo bar"), Revision: 1, Path: "foo/bar"},
 			"foo bar",
 		},
 		{
 			"other message",
 			&galleypb.ListFilesResponse{
 				Entries: []*galleypb.File{
-					{Contents: "foo bar", Revision: 1, Path: "foo/bar"},
-					{Contents: "bazz", Revision: 2, Path: "bazz"},
+					{Contents: []byte("foo bar"), Revision: 1, Path: "foo/bar"},
+					{Contents: []byte("bazz"), Revision: 2, Path: "bazz"},
 				},
 				NextPageToken: "token",
 			},
-			`{"entries":[{"path":"foo/bar","contents":"foo bar","revision":"1"},{"path":"bazz","contents":"bazz","revision":"2"}],"nextPageToken":"token"}`,
+			`{"entries":[{"path":"foo/bar","contents":"Zm9vIGJhcg==","revision":"1"},{"path":"bazz","contents":"YmF6eg==","revision":"2"}],"nextPageToken":"token"}`,
 		},
 	} {
 		buf.Reset()

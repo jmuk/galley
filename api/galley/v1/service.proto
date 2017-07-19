@@ -90,12 +90,13 @@ enum ContentType{
   JSON = 1;
   YAML = 2;
   PROTO_TEXT = 3;
+  BINARY = 4;
 }
 
 message CreateFileRequest {
   string path = 1;
 
-  string contents = 2;
+  bytes contents = 2;
 
   ContentType content_type = 3;
 
@@ -106,7 +107,7 @@ message CreateFileRequest {
 message UpdateFileRequest {
   string path = 1;
 
-  string contents = 2;
+  bytes contents = 2;
 
   ContentType content_type = 3;
 
@@ -164,7 +165,7 @@ message File{
   string path = 1;
 
   // Contents are modified by Galley. A roundtrip may not yeild the same result.
-  string contents = 2;
+  bytes contents = 2;
 
   // client supplied metadata.
   Metadata metadata = 3;

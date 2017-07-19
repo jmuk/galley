@@ -108,7 +108,7 @@ func (c *Client) reqCtx() (context.Context, context.CancelFunc) {
 func (c *Client) CreateFile(in *file.File) (*file.File, error) {
 	request := &galleypb.CreateFileRequest{
 		Path:        NameScopeToPath(in.Name, in.Scope),
-		Contents:    string(in.Contents),
+		Contents:    in.Contents,
 		ContentType: in.ContentType,
 	}
 	ctx, cancel := c.reqCtx()
@@ -121,7 +121,7 @@ func (c *Client) CreateFile(in *file.File) (*file.File, error) {
 		Path:     response.Path,
 		Name:     in.Name,
 		Scope:    in.Scope,
-		Contents: []byte(response.Contents),
+		Contents: response.Contents,
 		Revision: response.Revision,
 	}, nil
 }
@@ -130,7 +130,7 @@ func (c *Client) CreateFile(in *file.File) (*file.File, error) {
 func (c *Client) UpdateFile(in *file.File) (*file.File, error) {
 	request := &galleypb.UpdateFileRequest{
 		Path:        NameScopeToPath(in.Name, in.Scope),
-		Contents:    string(in.Contents),
+		Contents:    in.Contents,
 		ContentType: in.ContentType,
 	}
 	ctx, cancel := c.reqCtx()
@@ -143,7 +143,7 @@ func (c *Client) UpdateFile(in *file.File) (*file.File, error) {
 		Path:     response.Path,
 		Name:     in.Name,
 		Scope:    in.Scope,
-		Contents: []byte(response.Contents),
+		Contents: response.Contents,
 		Revision: response.Revision,
 	}, nil
 }
@@ -160,7 +160,7 @@ func (c *Client) GetFile(path string) (*file.File, error) {
 		return nil, err
 	}
 
-	parsed, err := file.PartialDecode([]byte(response.Contents), galleypb.ContentType_UNKNOWN)
+	parsed, err := file.PartialDecode(response.Contents, galleypb.ContentType_UNKNOWN)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (c *Client) GetFile(path string) (*file.File, error) {
 		Path:     response.Path,
 		Name:     parsed.Name,
 		Scope:    parsed.Scope,
-		Contents: []byte(response.Contents),
+		Contents: response.Contents,
 		Revision: response.Revision,
 	}, nil
 }
@@ -196,7 +196,7 @@ func (c *Client) ListFiles(path string, recurse, includeContents bool) ([]*file.
 			return nil, err
 		}
 		for _, entry := range response.Entries {
-			parsed, err := file.PartialDecode([]byte(entry.Contents), galleypb.ContentType_UNKNOWN)
+			parsed, err := file.PartialDecode(entry.Contents, galleypb.ContentType_UNKNOWN)
 			if err != nil {
 				return nil, err
 			}
@@ -204,7 +204,7 @@ func (c *Client) ListFiles(path string, recurse, includeContents bool) ([]*file.
 				Path:     entry.Path,
 				Name:     parsed.Name,
 				Scope:    parsed.Scope,
-				Contents: []byte(entry.Contents),
+				Contents: entry.Contents,
 				Revision: entry.Revision,
 			})
 		}

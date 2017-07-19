@@ -15,9 +15,12 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ghodss/yaml"
 	"github.com/golang/glog"
@@ -68,11 +71,14 @@ func getFile(ctx context.Context, s store.Store, path string) (*galleypb.File, e
 	return ifile.RawFile, nil
 }
 
-func newConfigFile(source string, ctype galleypb.ContentType) (*galleypb.ConfigFile, error) {
+func newConfigFile(source []byte, ctype galleypb.ContentType) (*galleypb.ConfigFile, error) {
+	if ctype == galleypb.ContentType_BINARY || !utf8.Valid(source) {
+		return nil, errors.New("binary format")
+	}
 	if ctype == galleypb.ContentType_UNKNOWN || ctype == galleypb.ContentType_YAML {
-		jsonSource, err := yaml.YAMLToJSON([]byte(source))
+		jsonSource, err := yaml.YAMLToJSON(source)
 		if err == nil {
-			source = string(jsonSource)
+			source = jsonSource
 			ctype = galleypb.ContentType_JSON
 		} else if ctype == galleypb.ContentType_YAML {
 			return nil, err
@@ -80,13 +86,13 @@ func newConfigFile(source string, ctype galleypb.ContentType) (*galleypb.ConfigF
 	}
 	file := &galleypb.ConfigFile{}
 	if ctype == galleypb.ContentType_UNKNOWN || ctype == galleypb.ContentType_JSON {
-		if err := jsonpb.UnmarshalString(source, file); err == nil {
+		if err := jsonpb.Unmarshal(bytes.NewReader(source), file); err == nil {
 			return file, nil
 		} else if ctype == galleypb.ContentType_JSON {
 			return nil, err
 		}
 	}
-	if err := proto.UnmarshalText(source, file); err != nil {
+	if err := proto.UnmarshalText(string(source), file); err != nil {
 		return nil, err
 	}
 	return file, nil

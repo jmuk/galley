@@ -55,7 +55,7 @@ func TestNewConfigFile(t *testing.T) {
 		{"proto", textConfig, galleypb.ContentType_PROTO_TEXT, true},
 	} {
 		t.Run(fmt.Sprintf("%s/%s", cc.msg, cc.ctype), func(tt *testing.T) {
-			result, err := newConfigFile(string(cc.source), cc.ctype)
+			result, err := newConfigFile(cc.source, cc.ctype)
 			succeeded := err == nil
 			if cc.ok != succeeded {
 				tt.Errorf("got %v, want %v (error: %v)", succeeded, cc.ok, err)
