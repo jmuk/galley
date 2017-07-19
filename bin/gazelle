@@ -14,3 +14,7 @@ fi
 gazelle \
     -go_prefix istio.io/galley \
     -build_file_name BUILD
+
+find . -type f -name BUILD -print0 | \
+    xargs -0 sed -i \
+          -e '/\/\/api\/galley\/v1:go_default_library/d'
