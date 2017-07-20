@@ -17,11 +17,15 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	galleypb "istio.io/galley/api/galley/v1"
 	"istio.io/galley/cmd/shared"
+	"istio.io/galley/pkg/client/file"
 )
 
 func replaceCmd(printf, fatalf shared.FormatFn) *cobra.Command {
-	return &cobra.Command{
+	var filenames []string
+
+	cmd := &cobra.Command{
 		Use:   "replace",
 		Short: "Replace an Istio configuration object by filename.",
 		Long: `
@@ -33,7 +37,23 @@ the complete resource spec must be provided. This can be obtained by
   $ istioctl get <path>
 `,
 		Run: func(_ *cobra.Command, _ []string) {
-			fatalf("replace not implemented yet")
+			if err := validateFilenames(filenames); err != nil {
+				fatalf(err.Error())
+			}
+			filename := filenames[0]
+
+			file, err := file.PartialDecodeFromFilename(filename, galleypb.ContentType_UNKNOWN)
+			if err != nil {
+				fatalf("cannot parse content from %q: %v", filename, err)
+			}
+			if _, err := global.client.UpdateFile(file); err != nil {
+				fatalf("cannot update file: %v", err)
+			}
 		},
 	}
+
+	cmd.Flags().StringArrayVarP(&filenames, "filename", "f", nil,
+		"Filename to use to replace the resource")
+
+	return cmd
 }

@@ -15,7 +15,6 @@
 package config
 
 import (
-	"bytes"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -150,7 +149,7 @@ func TestConfigLoad(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		got, err := load(bytes.NewReader([]byte(c.in)), "")
+		got, err := LoadFromString(c.in)
 		if c.wantErr {
 			if err == nil {
 				t.Errorf("%v: succeeded but should have failed", c.name)
@@ -193,7 +192,7 @@ func TestConfigLoadFromFile(t *testing.T) {
 }
 
 func TestConfigUseContext(t *testing.T) {
-	cfg, err := load(bytes.NewReader([]byte(caseMultipleContextsYAML)), "")
+	cfg, err := LoadFromString(caseMultipleContextsYAML)
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}

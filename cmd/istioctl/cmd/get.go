@@ -15,16 +15,75 @@
 package cmd
 
 import (
+	"path/filepath"
+
 	"github.com/spf13/cobra"
 
+	galleypb "istio.io/galley/api/galley/v1"
 	"istio.io/galley/cmd/shared"
+	"istio.io/galley/pkg/client"
+	"istio.io/galley/pkg/client/file"
 )
 
 func getCmd(printf, fatalf shared.FormatFn) *cobra.Command {
-	return &cobra.Command{
+	var (
+		filenames       []string
+		recurse         bool
+		includeContents bool
+	)
+
+	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "Display one or many Istio configuration objects by path.",
-		Run: func(_ *cobra.Command, _ []string) {
-			fatalf("get not implemented yet")
-		}}
+		Run: func(_ *cobra.Command, args []string) {
+			var path string
+
+			switch len(args) {
+			case 0:
+				if err := validateFilenames(filenames); err != nil {
+					fatalf(err.Error())
+				}
+				filename := filenames[0]
+				file, err := file.PartialDecodeFromFilename(filename, galleypb.ContentType_UNKNOWN)
+				if err != nil {
+					fatalf("cannot parse content from %q: %v", filename, err)
+				}
+				path = client.NameScopeToPath(file.Name, file.Scope)
+			case 1:
+				path = args[0]
+			case 2:
+				fatalf("too many arguments: expected explicit path or -f flag")
+			}
+
+			var files []*file.File
+			list := filepath.Ext(path) != ".cfg"
+			if list {
+				var err error
+				if files, err = global.client.ListFiles(path, recurse, includeContents); err != nil {
+					fatalf("cannot list files: %v", err)
+				}
+			} else {
+				file, err := global.client.GetFile(path)
+				if err != nil {
+					fatalf("cannot get file: %v", err)
+				}
+				files = append(files, file)
+			}
+			for _, file := range files {
+				printf("%v %v\n", file.Path, file.Revision)
+				if !list || includeContents {
+					printf("%v\n", string(file.Contents))
+				}
+			}
+		},
+	}
+
+	cmd.Flags().StringArrayVarP(&filenames, "filename", "f", nil,
+		"Filename to use to get the resource")
+	cmd.Flags().BoolVarP(&recurse, "recursive", "r", false,
+		"List the hierarchy recursively")
+	cmd.Flags().BoolVarP(&recurse, "include-contents", "i", false,
+		"Include the contents along with the paths")
+
+	return cmd
 }

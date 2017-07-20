@@ -17,7 +17,9 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	galleypb "istio.io/galley/api/galley/v1"
 	"istio.io/galley/cmd/shared"
+	"istio.io/galley/pkg/client/file"
 )
 
 func createCmd(printf, fatalf shared.FormatFn) *cobra.Command {
@@ -32,7 +34,18 @@ Create an Istio configuration object by filename.
 JSON and YAML formats are accepted.
 `,
 		Run: func(c *cobra.Command, args []string) {
-			fatalf("no filenames specified")
+			if err := validateFilenames(filenames); err != nil {
+				fatalf(err.Error())
+			}
+			filename := filenames[0]
+
+			file, err := file.PartialDecodeFromFilename(filename, galleypb.ContentType_UNKNOWN)
+			if err != nil {
+				fatalf("cannot parse content from %q: %v", filename, err)
+			}
+			if _, err := global.client.CreateFile(file); err != nil {
+				fatalf("cannot create file: %v", err)
+			}
 		},
 	}
 
