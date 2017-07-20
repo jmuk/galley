@@ -20,11 +20,11 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	galleypb "istio.io/galley/api/galley/v1"
-
 	"github.com/ghodss/yaml"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/struct"
+
+	galleypb "istio.io/galley/api/galley/v1"
 )
 
 // File provides a container for common file request and response

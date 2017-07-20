@@ -19,12 +19,12 @@ import (
 	"reflect"
 	"testing"
 
-	galleypb "istio.io/galley/api/galley/v1"
-
 	"github.com/ghodss/yaml"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/struct"
+
+	galleypb "istio.io/galley/api/galley/v1"
 )
 
 func TestPartialDecode(t *testing.T) {
@@ -50,7 +50,7 @@ func TestPartialDecode(t *testing.T) {
 		t.Fatalf("could not create YAML test content: %v", err)
 	}
 	var pb structpb.Struct
-	if err := jsonpb.UnmarshalString(string(wantContentJSON), &pb); err != nil {
+	if err = jsonpb.UnmarshalString(string(wantContentJSON), &pb); err != nil {
 		t.Fatalf("could not create temp protobuf for ProtoText test content: %v", err)
 	}
 	wantContentProto, err := proto.Marshal(&pb)
