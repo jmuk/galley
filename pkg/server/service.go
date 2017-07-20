@@ -112,7 +112,9 @@ func (s *GalleyService) UpdateFile(ctx context.Context, req *galleypb.UpdateFile
 func (s *GalleyService) DeleteFile(ctx context.Context, req *galleypb.DeleteFileRequest) (*empty.Empty, error) {
 	// TODO: validation.
 	_, err := s.s.Delete(ctx, normalizePath(req.Path))
-	if err != nil {
+	if err == store.ErrNotFound {
+		return nil, status.Newf(codes.NotFound, "path %s not found", req.Path).Err()
+	} else if err != nil {
 		return nil, err
 	}
 	return &empty.Empty{}, nil

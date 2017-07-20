@@ -129,6 +129,12 @@ func (es *Store) Delete(ctx context.Context, key string) (int64, error) {
 		clientv3.OpPut(globalRevisionKey, ""),
 		clientv3.OpDelete(key),
 	).Commit()
+	if err != nil {
+		return -1, err
+	}
+	if dresp := resp.Responses[1].GetResponseDeleteRange(); dresp.Deleted == 0 {
+		err = store.ErrNotFound
+	}
 	return resp.Header.Revision, err
 }
 

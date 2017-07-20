@@ -36,7 +36,7 @@ type Store interface {
 	// it should return RevisionMismatchError.
 	Set(ctx context.Context, key string, value []byte, revision int64) (outRevision int64, err error)
 
-	// Delete a key.
+	// Delete a key. If the key does not exist, it should return ErrNotFound.
 	Delete(ctx context.Context, key string) (outRevision int64, err error)
 
 	Watcher
