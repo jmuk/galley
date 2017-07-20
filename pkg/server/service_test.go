@@ -23,7 +23,9 @@ import (
 
 	"github.com/ghodss/yaml"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	galleypb "istio.io/galley/api/galley/v1"
 	"istio.io/galley/pkg/store/memstore"
@@ -185,5 +187,42 @@ func TestCRUD(t *testing.T) {
 	file, err = tm.client.GetFile(ctx, &galleypb.GetFileRequest{Path: p2})
 	if err == nil {
 		t.Errorf("Unexpectedly get %s: %+v", p2, file)
+	}
+}
+
+func TestDeleteTwice(t *testing.T) {
+	tm := &testManager{}
+	err := tm.setup()
+	if err != nil {
+		t.Fatalf("failed to setup: %v", err)
+	}
+	defer tm.close()
+
+	ctx := context.Background()
+	p1 := "foo/service.cfg"
+
+	_, err = tm.client.CreateFile(ctx, &galleypb.CreateFileRequest{
+		Path:     p1,
+		Contents: testConfig,
+	})
+	if err != nil {
+		t.Errorf("Falied to create the file %s: %+v", p1, err)
+	}
+
+	_, err = tm.client.DeleteFile(ctx, &galleypb.DeleteFileRequest{Path: p1})
+	if err != nil {
+		t.Errorf("Failed to delete the file: %v", err)
+	}
+
+	_, err = tm.client.DeleteFile(ctx, &galleypb.DeleteFileRequest{Path: p1})
+	if err == nil {
+		t.Errorf("Unexpectedly succeeded to delete twice")
+	}
+	stat, ok := status.FromError(err)
+	if !ok {
+		t.Errorf("Returned error is not a gRPC error")
+	}
+	if stat.Code() != codes.NotFound {
+		t.Errorf("Got %s, Want NotFound", stat.Code())
 	}
 }

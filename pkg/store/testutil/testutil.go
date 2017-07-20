@@ -151,6 +151,11 @@ func RunStoreTest(t *testing.T, newManagerFn func() (*TestManager, error)) {
 			if err == nil {
 				t.Errorf("Unexpectedly found %s", k[1])
 			}
+
+			_, err = s.Delete(ctx, k[1])
+			if err != store.ErrNotFound {
+				t.Errorf("unexpected error: %v", err)
+			}
 		})
 		if err := km.cleanup(); err != nil {
 			t.Errorf("failure on cleanup: %v", err)

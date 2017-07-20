@@ -91,6 +91,9 @@ func (ms *Store) Set(ctx context.Context, key string, value []byte, revision int
 func (ms *Store) Delete(ctx context.Context, key string) (int64, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
+	if _, ok := ms.data[key]; !ok {
+		return ms.revision, store.ErrNotFound
+	}
 	delete(ms.data, key)
 	ms.revision++
 	return ms.revision, nil
