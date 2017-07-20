@@ -16,12 +16,26 @@ package cmd
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"istio.io/galley/cmd/shared"
+	"istio.io/galley/pkg/client"
+	"istio.io/galley/pkg/client/config"
 )
+
+type commonOptions struct {
+	// Option to override the default server address
+	server string
+}
+
+var options commonOptions
+
+// shared state between all istio subcommands
+var global = struct {
+	config *config.Config
+	client *client.Client
+}{}
 
 // GetRootCmd generates the root command for istioctl
 func GetRootCmd(args []string) *cobra.Command {
@@ -34,10 +48,34 @@ Istio configuration command line tool.
 Create, list, modify, and delete configuration resources in the Istio
 system.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 {
-				return fmt.Errorf("'%s' is an invalid argument", args[0])
+			var err error
+			if global.config, err = config.LoadFromDefault(); err != nil {
+				// TODO manage all user configuration under `config`
+				// subcommand instead of implicitly creating default
+				// config here?
+				if global.config, err = config.New(); err != nil {
+					return err
+				}
+			}
+			if options.server != "" {
+				shared.Printf("Overriding default Galley server address with %q", options.server)
+				global.config.Current().Server = options.server
+			}
+
+			switch cmd.Name() {
+			case "create", "get", "replace", "delete":
+				if global.client, err = client.NewFromConfig(global.config); err != nil {
+					return err
+				}
 			}
 			return nil
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			// Persistent configuration changes
+			if global.config == nil {
+				return nil
+			}
+			return global.config.Save()
 		},
 	}
 	rootCmd.SetArgs(args)
@@ -56,6 +94,9 @@ system.`,
 	rootCmd.AddCommand(deleteCmd(shared.Printf, shared.Fatalf))
 	rootCmd.AddCommand(completionCmd(shared.Printf, shared.Fatalf))
 	rootCmd.AddCommand(shared.VersionCmd())
+
+	rootCmd.Flags().StringVar(&options.server, "server", "",
+		"Override the current galley server address")
 
 	return rootCmd
 }

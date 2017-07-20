@@ -22,6 +22,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -132,6 +133,11 @@ func LoadFromFile(filename string) (*Config, error) {
 	return load(file, filename)
 }
 
+// LoadFromString loads a user configuration from the input string.
+func LoadFromString(in string) (*Config, error) {
+	return load(bytes.NewReader([]byte(in)), "")
+}
+
 // UserFilename returns the filename of the user configuration file.
 func UserFilename() (string, error) {
 	if name := os.Getenv(PathEnvVar); name != "" {
@@ -151,6 +157,25 @@ func LoadFromDefault() (*Config, error) {
 		return nil, err
 	}
 	return LoadFromFile(filename)
+}
+
+const defaultCurrentContext = "default"
+
+// New creates a new instance of a configuration object based on the
+// default user filename. This can be subsequently updated and saved
+// to create the default user configuration.
+func New() (*Config, error) {
+	filename, err := UserFilename()
+	if err != nil {
+		return nil, err
+	}
+	return &Config{
+		CurrentContext: defaultCurrentContext,
+		Contexts: map[string]*Context{
+			defaultCurrentContext: {},
+		},
+		origin: filename,
+	}, nil
 }
 
 // Save saves the in-memory user configuration to the originating
