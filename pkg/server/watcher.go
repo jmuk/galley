@@ -84,15 +84,16 @@ func NewWatcherServer(s store.Store, interval time.Duration) (*WatcherServer, er
 }
 
 func (s *WatcherServer) watchLoop(ctx context.Context, c <-chan store.Event) {
-	t := time.Tick(s.interval)
+	t := time.NewTicker(s.interval)
 	evs := []store.Event{}
 	for {
 		select {
 		case <-ctx.Done():
+			t.Stop()
 			return
 		case ev := <-c:
 			evs = append(evs, ev)
-		case <-t:
+		case <-t.C:
 			s.dispatchEvents(evs)
 			evs = []store.Event{}
 		}
