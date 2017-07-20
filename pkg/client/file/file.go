@@ -40,6 +40,15 @@ type File struct {
 	Scope string
 }
 
+func (f File) String() string {
+	return fmt.Sprintf("{Path: %v, Revision: %v ContentType: %v Contents: %v}",
+		f.Path,
+		f.Revision,
+		f.ContentType,
+		string(f.Contents),
+	)
+}
+
 // structure to allow for partial decoding of file contents to
 // discover name and scope.
 type partialConfigFile struct {
