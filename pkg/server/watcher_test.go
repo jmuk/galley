@@ -25,14 +25,15 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	galleypb "istio.io/galley/api/galley/v1"
 	internalpb "istio.io/galley/pkg/server/internal"
 	"istio.io/galley/pkg/store"
 )
 
-const watchIntervalForTest time.Duration = time.Millisecond
-const waitDurationForTest = watchIntervalForTest * 3
+const watchIntervalForTest = time.Millisecond
 
 const PUT = galleypb.ConfigFileChange_PUT
 const DELETE = galleypb.ConfigFileChange_DELETE
@@ -95,12 +96,15 @@ func newWatcherManager(withGalley bool) *testWatcherManager {
 
 type watchConsumer struct {
 	s     galleypb.Watcher_WatchClient
+	scope string
 	types map[string]bool
 
-	done chan interface{}
+	t *testing.T
 
 	mu          sync.Mutex
-	valid       bool
+	done        chan interface{}
+	onEvent     func()
+	created     bool
 	initialized bool
 	revision    int64
 	initialData map[string]*galleypb.ConfigFile
@@ -108,7 +112,7 @@ type watchConsumer struct {
 	recvCount   int
 }
 
-func (tm *testWatcherManager) newWatchConsumer(ctx context.Context, scope string, types []string) (*watchConsumer, error) {
+func (tm *testWatcherManager) newWatchConsumer(ctx context.Context, t *testing.T, scope string, types []string) (*watchConsumer, error) {
 	s, err := tm.client.Watch(ctx, &galleypb.WatchRequest{
 		Scope:               scope,
 		Types:               types,
@@ -124,8 +128,9 @@ func (tm *testWatcherManager) newWatchConsumer(ctx context.Context, scope string
 	}
 	c := &watchConsumer{
 		s:           s,
+		scope:       scope,
 		types:       ts,
-		done:        make(chan interface{}),
+		t:           t,
 		revision:    -1,
 		initialData: map[string]*galleypb.ConfigFile{},
 	}
@@ -137,7 +142,6 @@ func (c *watchConsumer) Close(t *testing.T) {
 	if err := c.s.CloseSend(); err != nil {
 		t.Errorf("error on CloseSend: %v", err)
 	}
-	close(c.done)
 }
 
 func (c *watchConsumer) RecvCount() int {
@@ -158,84 +162,109 @@ func (c *watchConsumer) NumEvents() int {
 	return len(c.events)
 }
 
+func (c *watchConsumer) setOnEvent(onEvent func() bool) {
+	c.mu.Lock()
+	c.done = make(chan interface{})
+	c.onEvent = func() {
+		if onEvent() {
+			close(c.done)
+			c.onEvent = nil
+		}
+	}
+	c.onEvent()
+	c.mu.Unlock()
+}
+
+func (c *watchConsumer) wait() {
+	<-c.done
+}
+
 func (c *watchConsumer) start() {
 	for {
 		resp, err := c.s.Recv()
-		if err == io.EOF {
-			close(c.done)
+		if err == io.EOF || err == context.Canceled || err == context.DeadlineExceeded {
+			return
+		} else if st, ok := status.FromError(err); ok && st.Code() == codes.Canceled {
+			// cancellation happens on the end of the tests.
 			return
 		} else if err != nil {
-			c.valid = false
+			c.t.Errorf("%s: unexpected error on Recv: %v", c.scope, err)
 			return
 		}
 		c.mu.Lock()
 		c.recvCount++
-		if created := resp.GetCreated(); created != nil {
-			if c.valid {
-				fmt.Printf("created event comes twice")
+		switch r := resp.GetResponseUnion().(type) {
+		case *galleypb.WatchResponse_Created:
+			if c.created {
+				c.t.Errorf("%s: created event comes twice", c.scope)
 			}
-			c.valid = !c.valid
-			c.revision = created.CurrentRevision
-		} else if initialState := resp.GetInitialState(); initialState != nil {
+			c.created = true
+			c.revision = r.Created.CurrentRevision
+		case *galleypb.WatchResponse_InitialState:
 			if c.initialized {
-				fmt.Printf("already initialized")
+				c.t.Errorf("%s: already initialized", c.scope)
 			} else {
-				for _, ent := range initialState.Entries {
+				for _, ent := range r.InitialState.Entries {
 					c.initialData[ent.FileId] = ent.File
 				}
-				if initialState.Done {
+				if r.InitialState.Done {
 					c.initialized = true
 				}
 			}
-		} else if progress := resp.GetProgress(); progress != nil {
-			c.revision = progress.CurrentRevision
-		} else if events := resp.GetEvents(); events != nil {
-			c.events = append(c.events, events.Events...)
-		} else {
-			fmt.Printf("unrecognized event %+v", resp)
-			c.valid = false
+		case *galleypb.WatchResponse_Progress:
+			c.revision = r.Progress.CurrentRevision
+		case *galleypb.WatchResponse_Events:
+			c.events = append(c.events, r.Events.Events...)
+		default:
+			c.t.Errorf("%s: unrecognized event: %+v", c.scope, resp)
+		}
+		if c.onEvent != nil {
+			c.onEvent()
 		}
 		c.mu.Unlock()
 	}
 }
 
-func (c *watchConsumer) validateFile(t *testing.T, actual, expected *galleypb.ConfigFile) {
-	if expected == nil {
-		if actual != nil {
-			t.Errorf("Got %+v, Want nil", actual)
+func (c *watchConsumer) validateFile(got, want *galleypb.ConfigFile) error {
+	if want == nil {
+		if got != nil {
+			return fmt.Errorf("Got %+v, Want nil", got)
 		}
-		return
+		return nil
 	}
-	if actual.Scope != expected.Scope || actual.Name != expected.Name {
-		t.Errorf("Got %s/%s, Want %s/%s", actual.Scope, actual.Name, expected.Scope, expected.Name)
+	if got.Scope != want.Scope || got.Name != want.Name {
+		return fmt.Errorf("Got %s/%s, Want %s/%s", got.Scope, got.Name, want.Scope, want.Name)
 	}
-	if !reflect.DeepEqual(actual.Metadata, expected.Metadata) {
-		t.Errorf("Got %+v, Want %+v", actual.Metadata, expected.Metadata)
+	if !reflect.DeepEqual(got.Metadata, want.Metadata) {
+		return fmt.Errorf("metadata: Got %+v, Want %+v", got.Metadata, want.Metadata)
 	}
-	if expected.ServerMetadata != nil {
-		if actual.ServerMetadata.Path != expected.ServerMetadata.Path {
-			t.Errorf("Got %s, Want %s", actual.ServerMetadata.Path, expected.ServerMetadata.Path)
+	if want.ServerMetadata != nil {
+		if got.ServerMetadata.Path != want.ServerMetadata.Path {
+			return fmt.Errorf("server metadata: Got %s, Want %s", got.ServerMetadata.Path, want.ServerMetadata.Path)
 		}
 	}
 
 	w := &watcher{types: c.types}
-	filtered := w.filterConfigFile(expected)
-	if !reflect.DeepEqual(actual.Config, filtered.Config) {
-		t.Errorf("Got %+v\nWant %+v", actual.Config, filtered.Config)
+	filtered := w.filterConfigFile(want)
+	if !reflect.DeepEqual(got.Config, filtered.Config) {
+		return fmt.Errorf("config: Got %+v\nWant %+v", got.Config, filtered.Config)
 	}
+	return nil
 }
 
-func (c *watchConsumer) checkInitialData(t *testing.T, expected map[string]*galleypb.ConfigFile) {
+func (c *watchConsumer) checkInitialData(want map[string]*galleypb.ConfigFile) (errs []error) {
 	uncheckedFiles := map[string]bool{}
 	for k := range c.initialData {
 		uncheckedFiles[k] = true
 	}
-	for k, e := range expected {
-		if a, ok := c.initialData[k]; ok {
-			c.validateFile(t, a, e)
+	for k, w := range want {
+		if g, ok := c.initialData[k]; ok {
+			if err := c.validateFile(g, w); err != nil {
+				errs = append(errs, fmt.Errorf("failed to validate file %s: %v", k, err))
+			}
 			delete(uncheckedFiles, k)
 		} else {
-			t.Errorf("initial data is missing %s", k)
+			errs = append(errs, fmt.Errorf("initial data is missing %s", k))
 		}
 	}
 	if len(uncheckedFiles) != 0 {
@@ -243,11 +272,14 @@ func (c *watchConsumer) checkInitialData(t *testing.T, expected map[string]*gall
 		for k := range uncheckedFiles {
 			names = append(names, k)
 		}
-		t.Errorf("unexpected files in the initialData: %+v", names)
+		errs = append(errs, fmt.Errorf("unexpected files in the initialData: %+v", names))
 	}
+	return errs
 }
 
-func (c *watchConsumer) checkEvents(t *testing.T, msg string, expected ...*galleypb.ConfigFileChange) {
+func (c *watchConsumer) checkEventsAndReset(t *testing.T, msg string, expected ...*galleypb.ConfigFileChange) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if len(c.events) < len(expected) {
 		t.Errorf("%s: not receiving events sufficiently: got %d events, want %d events",
 			msg, len(c.events), len(expected))
@@ -260,7 +292,9 @@ func (c *watchConsumer) checkEvents(t *testing.T, msg string, expected ...*galle
 			if eav.Type == ev.Type && eav.FileId == ev.FileId {
 				found = i
 				if ev.Type == PUT {
-					c.validateFile(t, eav.NewFile, ev.NewFile)
+					if err := c.validateFile(eav.NewFile, ev.NewFile); err != nil {
+						t.Errorf("invalid newfile data for PUT event %s: %v", ev.FileId, err)
+					}
 				}
 			}
 		}
@@ -270,6 +304,7 @@ func (c *watchConsumer) checkEvents(t *testing.T, msg string, expected ...*galle
 			t.Errorf("%s: event %+v not found", msg, ev)
 		}
 	}
+	c.events = []*galleypb.ConfigFileChange{}
 }
 
 func newTestChange(typ galleypb.ConfigFileChange_EventType, name string, file *galleypb.ConfigFile) *galleypb.ConfigFileChange {
@@ -304,67 +339,82 @@ func TestWatching(t *testing.T) {
 		t.Fatalf("failed to set: %v", err)
 	}
 
-	w1, err := tm.newWatchConsumer(ctx, "dept1", []string{"constructor", "handler"})
+	w1, err := tm.newWatchConsumer(ctx, t, "dept1", []string{"constructor", "handler"})
 	if err != nil {
 		t.Errorf("failed to watch: %v", err)
 	}
 	defer w1.Close(t)
-	w2, err := tm.newWatchConsumer(ctx, "", []string{"unknown"})
+	w2, err := tm.newWatchConsumer(ctx, t, "", []string{"unknown"})
 	if err != nil {
 		t.Errorf("failed to watch: %v", err)
 	}
 	defer w2.Close(t)
-	time.Sleep(waitDurationForTest)
-	if !w1.valid || !w1.initialized {
-		t.Errorf("invalid status w1")
-	}
-	w1.checkInitialData(t, map[string]*galleypb.ConfigFile{
-		k1: configFile,
+	w1.setOnEvent(func() bool {
+		return w1.created && w1.initialized
 	})
-	if !w2.valid || !w2.initialized {
-		t.Errorf("invalid status w2")
+	w2.setOnEvent(func() bool {
+		return w2.created && w2.initialized
+	})
+	w1.wait()
+	w2.wait()
+	if errs := w1.checkInitialData(map[string]*galleypb.ConfigFile{k1: configFile}); len(errs) > 0 {
+		t.Errorf("w1.checkInitialData failed: %+v", errs)
 	}
-	w2.checkInitialData(t, map[string]*galleypb.ConfigFile{})
+	if errs := w2.checkInitialData(map[string]*galleypb.ConfigFile{}); len(errs) > 0 {
+		t.Errorf("w2.checkInitialData failed: %+v", errs)
+	}
 
+	w1.setOnEvent(func() bool {
+		return len(w1.events) >= 1
+	})
+	w2.setOnEvent(func() bool {
+		return len(w2.events) >= 2
+	})
 	if err = tm.setData(ctx, k2, testConfig, true); err != nil {
 		t.Fatalf("failed to set: %v", err)
 	}
 	if err = tm.setData(ctx, k3, testConfig, true); err != nil {
 		t.Fatalf("failed to set: %v", err)
 	}
-	time.Sleep(waitDurationForTest)
+	w1.wait()
+	w2.wait()
+	w1.checkEventsAndReset(t, "w1/put", newTestChange(PUT, k2, configFile))
+	w2.checkEventsAndReset(t, "w2/put", newTestChange(PUT, k2, nil), newTestChange(PUT, k3, nil))
 
-	w1.checkEvents(t, "w1/put", newTestChange(PUT, k2, configFile))
-	w2.checkEvents(t, "w2/put", newTestChange(PUT, k2, nil), newTestChange(PUT, k3, nil))
-
+	w1.setOnEvent(func() bool {
+		return len(w1.events) >= 1
+	})
 	if err = tm.setData(ctx, k2, testConfig, false); err != nil {
 		t.Fatalf("failed to set: %v", err)
 	}
-	time.Sleep(waitDurationForTest)
-
-	w1.checkEvents(t, "w1/put", newTestChange(PUT, k2, nil))
+	w1.wait()
+	w1.checkEventsAndReset(t, "w1/put", newTestChange(PUT, k2, nil))
 
 	r1 := w1.Revision()
-	e1 := w1.NumEvents()
-
+	w1.setOnEvent(func() bool {
+		return w1.revision > r1
+	})
 	if _, err = tm.s.Delete(ctx, k3); err != nil {
 		t.Fatalf("failed to delete: %v", err)
 	}
-	time.Sleep(waitDurationForTest)
-
-	if rr1 := w1.Revision(); r1 >= rr1 {
-		t.Errorf("revision is not updated properly, got %d, want >%d", rr1, r1)
-	}
-	if e1 != w1.NumEvents() {
+	w1.wait()
+	if w1.NumEvents() != 0 {
 		t.Errorf("new events arrived to w1 unexpectedly")
 	}
 
+	w1.setOnEvent(func() bool {
+		return len(w1.events) >= 1
+	})
+	w2.setOnEvent(func() bool {
+		return len(w2.events) >= 2
+	})
 	if _, err = tm.s.Delete(ctx, k2); err != nil {
 		t.Fatalf("failed to delete: %v", err)
 	}
-	time.Sleep(waitDurationForTest)
-	w1.checkEvents(t, "w1/delete", newTestChange(DELETE, k2, nil))
-	w2.checkEvents(t, "w2/delete", newTestChange(DELETE, k3, nil), newTestChange(DELETE, k2, nil))
+	w1.wait()
+	w2.wait()
+	w1.checkEventsAndReset(t, "w1/delete", newTestChange(DELETE, k2, nil))
+	w2.checkEventsAndReset(t, "w2/delete", newTestChange(DELETE, k3, nil), newTestChange(DELETE, k2, nil))
 }
 
 func TestWithGalleyService(t *testing.T) {
@@ -387,15 +437,18 @@ func TestWithGalleyService(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	w, err := tm.newWatchConsumer(ctx, "dept1", []string{"rule"})
+	w, err := tm.newWatchConsumer(ctx, t, "dept1", []string{"rule"})
 	if err != nil {
 		t.Fatalf("failed to start watch: %v", err)
 	}
-	time.Sleep(waitDurationForTest)
-	if !w.valid || !w.initialized {
-		t.Fatalf("failed to initialize the watcher: %+v", w)
-	}
+	w.setOnEvent(func() bool {
+		return w.created && w.initialized
+	})
+	w.wait()
 
+	w.setOnEvent(func() bool {
+		return len(w.events) > 0
+	})
 	gc := tm.galley.client
 	_, err = gc.CreateFile(ctx, &galleypb.CreateFileRequest{
 		Path:     k1,
@@ -404,12 +457,13 @@ func TestWithGalleyService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create the file %s: %v", k1, err)
 	}
-	time.Sleep(waitDurationForTest)
-	w.checkEvents(t, "create", newTestChange(PUT, k1, configFile))
+	w.wait()
+	w.checkEventsAndReset(t, "create", newTestChange(PUT, k1, configFile))
 
 	r1 := w.Revision()
-	e1 := w.NumEvents()
-
+	w.setOnEvent(func() bool {
+		return w.revision > r1
+	})
 	_, err = gc.CreateFile(ctx, &galleypb.CreateFileRequest{
 		Path:     k2,
 		Contents: testConfig,
@@ -417,19 +471,19 @@ func TestWithGalleyService(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to create the file %s: %v", k2, err)
 	}
-	time.Sleep(waitDurationForTest)
-	if r2 := w.Revision(); r2 <= r1 {
-		t.Errorf("Revision is not updated, got %d, want >%d", r2, r1)
-	}
-	if e2 := w.NumEvents(); e2 != e1 {
+	w.wait()
+	if w.NumEvents() != 0 {
 		t.Errorf("new events arrived unexpectedly")
 	}
 
+	w.setOnEvent(func() bool {
+		return len(w.events) > 0
+	})
 	if _, err = gc.DeleteFile(ctx, &galleypb.DeleteFileRequest{Path: k1}); err != nil {
 		t.Errorf("failed to delete %s: %v", k1, err)
 	}
-	time.Sleep(waitDurationForTest)
-	w.checkEvents(t, "delete", newTestChange(DELETE, k1, nil))
+	w.wait()
+	w.checkEventsAndReset(t, "delete", newTestChange(DELETE, k1, nil))
 }
 
 func TestFilterConfigFile(t *testing.T) {

@@ -31,6 +31,9 @@ import (
 	"istio.io/galley/pkg/store"
 )
 
+// The buffer size for the channel in watcher.
+const watcherBufSize = 10
+
 type watcher struct {
 	ch     chan *galleypb.WatchResponse
 	prefix string
@@ -73,6 +76,7 @@ type WatcherServer struct {
 	nextWatcherID   int64
 	watchers        map[int64]*watcher
 	lastRevision    int64
+	backlog         map[int64][]*galleypb.ConfigFileChange
 }
 
 var _ galleypb.WatcherServer = &WatcherServer{}
@@ -101,9 +105,12 @@ func (s *WatcherServer) watchLoop(ctx context.Context, c <-chan store.Event) {
 }
 
 // filterEvents converts the store.Event instance to galleypb.Event and transforms the event
-// slice to the mapping from watcher id to the events relevante to the watcher.
+// slice to the mapping from watcher id to the events relevant to the watcher.
 func (s *WatcherServer) filterEvents(evs []store.Event) map[int64]*galleypb.WatchEvents {
 	filtered := map[int64]*galleypb.WatchEvents{}
+	for id := range s.watchers {
+		filtered[id] = &galleypb.WatchEvents{}
+	}
 	for _, ev := range evs {
 		if ev.Revision > s.lastRevision {
 			s.lastRevision = ev.Revision
@@ -115,11 +122,7 @@ func (s *WatcherServer) filterEvents(evs []store.Event) map[int64]*galleypb.Watc
 			if !strings.HasPrefix(ev.Key, w.prefix) {
 				continue
 			}
-			target, ok := filtered[id]
-			if !ok {
-				target = &galleypb.WatchEvents{}
-				filtered[id] = target
-			}
+			target := filtered[id]
 			if newFile == nil && ev.Type == store.PUT {
 				if newFile, err = getConfigFile(ev.Value); err != nil {
 					glog.Warningf("failed to parse the value: %v", err)
@@ -150,9 +153,7 @@ func (s *WatcherServer) filterEvents(evs []store.Event) map[int64]*galleypb.Watc
 				}
 				pbev.Type = galleypb.ConfigFileChange_DELETE
 			}
-			if pbev != nil {
-				target.Events = append(target.Events, pbev)
-			}
+			target.Events = append(target.Events, pbev)
 		}
 	}
 	return filtered
@@ -161,12 +162,38 @@ func (s *WatcherServer) filterEvents(evs []store.Event) map[int64]*galleypb.Watc
 func (s *WatcherServer) dispatchEvents(evs []store.Event) {
 	s.mu.Lock()
 	filtered := s.filterEvents(evs)
+	progress := &galleypb.WatchResponse_Progress{
+		Progress: &galleypb.WatchProgress{
+			CurrentRevision: s.lastRevision,
+		},
+	}
 	for id, w := range s.watchers {
-		if pbevs, ok := filtered[id]; ok && len(pbevs.Events) > 0 {
-			w.ch <- &galleypb.WatchResponse{ResponseUnion: &galleypb.WatchResponse_Events{Events: pbevs}}
+		resp := &galleypb.WatchResponse{}
+		pbevs := filtered[id]
+		if log, ok := s.backlog[id]; ok {
+			if len(pbevs.Events) > 0 {
+				log = append(log, pbevs.Events...)
+			}
+			resp.ResponseUnion = &galleypb.WatchResponse_Events{
+				Events: &galleypb.WatchEvents{
+					Events: log,
+				},
+			}
+			delete(s.backlog, id)
 		} else {
-			w.ch <- &galleypb.WatchResponse{
-				ResponseUnion: &galleypb.WatchResponse_Progress{Progress: &galleypb.WatchProgress{CurrentRevision: s.lastRevision}},
+			if pbevs := filtered[id]; len(pbevs.Events) > 0 {
+				resp.ResponseUnion = &galleypb.WatchResponse_Events{Events: pbevs}
+			} else {
+				resp.ResponseUnion = progress
+			}
+		}
+		select {
+		case w.ch <- resp:
+			// OK
+		default:
+			glog.Warningf("can't push events to %s", w)
+			if resp.GetEvents() != nil {
+				s.backlog[id] = resp.GetEvents().Events
 			}
 		}
 	}
@@ -188,26 +215,12 @@ func (s *WatcherServer) initiateWatcher(ctx context.Context, req *galleypb.Watch
 
 	// register watcher struct
 	watcher := &watcher{
-		ch:     make(chan *galleypb.WatchResponse),
+		ch:     make(chan *galleypb.WatchResponse, watcherBufSize),
 		prefix: prefix,
 		types:  map[string]bool{},
 	}
 	for _, t := range req.Types {
 		watcher.types[t] = true
-	}
-	id := s.nextWatcherID
-	s.watchers[id] = watcher
-	s.nextWatcherID++
-	if s.cancelWatchChan == nil {
-		// do not use the input ctx, because the watch channel may outlive the requested watch stream.
-		wctx, cancel := context.WithCancel(context.Background())
-		wch, werr := s.s.Watch(wctx, "", req.StartRevision)
-		if werr != nil {
-			cancel()
-			return -1, nil, werr
-		}
-		s.cancelWatchChan = cancel
-		go s.watchLoop(wctx, wch)
 	}
 
 	err = stream.Send(&galleypb.WatchResponse{
@@ -216,13 +229,13 @@ func (s *WatcherServer) initiateWatcher(ctx context.Context, req *galleypb.Watch
 			Created: &galleypb.WatchCreated{CurrentRevision: revision},
 		},
 	})
-	if err != nil {
-		return -1, nil, err
-	}
 
-	if req.IncludeInitialState {
+	if err == nil && req.IncludeInitialState {
 		// TODO: paging when data is huge.
-		state := &galleypb.InitialState{Entries: make([]*galleypb.ConfigFileEntry, 0, len(data)), Done: true}
+		state := &galleypb.InitialState{
+			Entries: make([]*galleypb.ConfigFileEntry, 0, len(data)),
+			Done:    true,
+		}
 		for k, v := range data {
 			ifile := &internalpb.File{}
 			if err = proto.Unmarshal(v, ifile); err != nil {
@@ -244,10 +257,28 @@ func (s *WatcherServer) initiateWatcher(ctx context.Context, req *galleypb.Watch
 				InitialState: state,
 			},
 		})
-		if err != nil {
-			glog.Errorf("failed to send the initial state: %v", err)
-		}
 	}
+
+	if err != nil {
+		return -1, nil, err
+	}
+
+	if s.cancelWatchChan == nil {
+		// do not use the input ctx, because the watch channel may outlive the requested watch stream.
+		wctx, cancel := context.WithCancel(context.Background())
+		wch, werr := s.s.Watch(wctx, "", req.StartRevision)
+		if werr != nil {
+			cancel()
+			return -1, nil, werr
+		}
+		s.cancelWatchChan = cancel
+		go s.watchLoop(wctx, wch)
+	}
+
+	id := s.nextWatcherID
+	s.watchers[id] = watcher
+	s.nextWatcherID++
+
 	return id, watcher, nil
 }
 

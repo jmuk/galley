@@ -26,9 +26,46 @@ import (
 )
 
 type watcher struct {
-	id     int
+	// The key prefix.
 	prefix string
-	ch     chan store.Event
+
+	// chin is the channel to exchange event objects internally in the memstore.
+	// chout is the channel returned by Watch method. A watcher has those two
+	// channels so that the blocking status of chout doesn't affect the internal
+	// flow of events.
+	chin  chan store.Event
+	chout chan store.Event
+
+	// ctx is the context of the watcher, it will stop the loop when it's done.
+	// cancel keeps the function to cancel ctx.
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// loop runs the message loop of reading event from chin and sending it to chout.
+// It has a dual loop to read the events from chin even when the chout is
+// blocked. onDone will be invoked when the context has been finished.
+func (w *watcher) loop(onDone func()) {
+	for {
+		select {
+		case <-w.ctx.Done():
+			onDone()
+			return
+		case ev := <-w.chin:
+			evs := []store.Event{ev}
+			for len(evs) > 0 {
+				select {
+				case <-w.ctx.Done():
+					onDone()
+					return
+				case w.chout <- evs[0]:
+					evs = evs[1:]
+				case ev = <-w.chin:
+					evs = append(evs, ev)
+				}
+			}
+		}
+	}
 }
 
 // Store implements store.Store.
@@ -47,6 +84,11 @@ func (ms *Store) String() string {
 
 // Close implements io.Closer interface.
 func (ms *Store) Close() error {
+	ms.mu.Lock()
+	for _, w := range ms.watchers {
+		w.cancel()
+	}
+	ms.mu.Unlock()
 	return nil
 }
 
@@ -79,16 +121,21 @@ func (ms *Store) List(ctx context.Context, prefix string) (map[string][]byte, in
 }
 
 func (ms *Store) dispatchWatchEvents(t store.EventType, key string, value, prevValue []byte, revision int64) {
+	ev := store.Event{
+		Type:          t,
+		Key:           key,
+		Value:         value,
+		PreviousValue: prevValue,
+		Revision:      revision,
+	}
 	for _, w := range ms.watchers {
 		if !strings.HasPrefix(key, w.prefix) {
 			continue
 		}
-		w.ch <- store.Event{
-			Type:          t,
-			Key:           key,
-			Value:         value,
-			PreviousValue: prevValue,
-			Revision:      revision,
+		// Sending the event only when the watcher will accept it.
+		select {
+		case <-w.ctx.Done():
+		case w.chin <- ev:
 		}
 	}
 }
@@ -125,24 +172,23 @@ func (ms *Store) Delete(ctx context.Context, key string) (int64, error) {
 	return ms.revision, nil
 }
 
-func (ms *Store) waitWatch(ctx context.Context, w *watcher) {
-	<-ctx.Done()
-	close(w.ch)
-
-	ms.mu.Lock()
-	delete(ms.watchers, w.id)
-	ms.mu.Unlock()
-}
-
 // Watch implements store.Watcher interface.
 func (ms *Store) Watch(ctx context.Context, key string, revision int64) (<-chan store.Event, error) {
 	ms.mu.Lock()
-	w := &watcher{ms.nextWatcherID, key, make(chan store.Event)}
+	wctx, cancel := context.WithCancel(ctx)
+	w := &watcher{key, make(chan store.Event), make(chan store.Event), wctx, cancel}
+	id := ms.nextWatcherID
 	ms.nextWatcherID++
-	ms.watchers[w.id] = w
-	go ms.waitWatch(ctx, w)
+	ms.watchers[id] = w
+	go w.loop(func() {
+		ms.mu.Lock()
+		delete(ms.watchers, id)
+		close(w.chin)
+		close(w.chout)
+		ms.mu.Unlock()
+	})
 	ms.mu.Unlock()
-	return w.ch, nil
+	return w.chout, nil
 }
 
 // New creates a new instance of Store.
