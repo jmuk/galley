@@ -166,7 +166,7 @@ func TestCRUD(t *testing.T) {
 }
 
 func TestDeleteTwice(t *testing.T) {
-	tm := &testManager{}
+	tm := newGalleyTestManager()
 	err := tm.setup()
 	if err != nil {
 		t.Fatalf("failed to setup: %v", err)
