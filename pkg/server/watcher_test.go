@@ -228,26 +228,26 @@ func (c *watchConsumer) start() {
 func (c *watchConsumer) validateFile(got, want *galleypb.ConfigFile) error {
 	if want == nil {
 		if got != nil {
-			return fmt.Errorf("Got %+v, Want nil", got)
+			return fmt.Errorf("got %+v, want nil", got)
 		}
 		return nil
 	}
 	if got.Scope != want.Scope || got.Name != want.Name {
-		return fmt.Errorf("Got %s/%s, Want %s/%s", got.Scope, got.Name, want.Scope, want.Name)
+		return fmt.Errorf("got %s/%s, want %s/%s", got.Scope, got.Name, want.Scope, want.Name)
 	}
 	if !reflect.DeepEqual(got.Metadata, want.Metadata) {
-		return fmt.Errorf("metadata: Got %+v, Want %+v", got.Metadata, want.Metadata)
+		return fmt.Errorf("metadata: got %+v, want %+v", got.Metadata, want.Metadata)
 	}
 	if want.ServerMetadata != nil {
 		if got.ServerMetadata.Path != want.ServerMetadata.Path {
-			return fmt.Errorf("server metadata: Got %s, Want %s", got.ServerMetadata.Path, want.ServerMetadata.Path)
+			return fmt.Errorf("server metadata: got %s, want %s", got.ServerMetadata.Path, want.ServerMetadata.Path)
 		}
 	}
 
 	w := &watcher{types: c.types}
 	filtered := w.filterConfigFile(want)
 	if !reflect.DeepEqual(got.Config, filtered.Config) {
-		return fmt.Errorf("config: Got %+v\nWant %+v", got.Config, filtered.Config)
+		return fmt.Errorf("config: got %+v\nwant %+v", got.Config, filtered.Config)
 	}
 	return nil
 }
