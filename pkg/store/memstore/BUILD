@@ -6,7 +6,10 @@ go_library(
     name = "go_default_library",
     srcs = ["memstore.go"],
     visibility = ["//visibility:public"],
-    deps = ["//pkg/store:go_default_library"],
+    deps = [
+        "//pkg/store:go_default_library",
+        "@com_github_golang_glog//:go_default_library",
+    ],
 )
 
 go_test(

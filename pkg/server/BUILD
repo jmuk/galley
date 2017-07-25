@@ -44,12 +44,15 @@ go_test(
     library = ":go_default_library",
     deps = [
         "//api:galley/v1",  # keep
+        "//pkg/server/internal:go_default_library",
+        "//pkg/store:go_default_library",
         "//pkg/store/memstore:go_default_library",
         "@com_github_ghodss_yaml//:go_default_library",
-        "@com_github_golang_protobuf//jsonpb:go_default_library",
         "@com_github_golang_protobuf//proto:go_default_library",
         "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
         "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes:go_default_library",
         "@org_golang_google_grpc//metadata:go_default_library",
+        "@org_golang_google_grpc//status:go_default_library",
     ],
 )

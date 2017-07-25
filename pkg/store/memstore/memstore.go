@@ -22,6 +22,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/golang/glog"
+
 	"istio.io/galley/pkg/store"
 )
 
@@ -62,6 +64,9 @@ func (w *watcher) loop(onDone func()) {
 					evs = evs[1:]
 				case ev = <-w.chin:
 					evs = append(evs, ev)
+					if len(evs) > 10 {
+						glog.Warningf("%d events are queued. The watcher client might be missing to consume them.", len(evs))
+					}
 				}
 			}
 		}
