@@ -125,13 +125,13 @@ func (s *WatcherServer) filterEvents(evs []store.Event) map[int64]*galleypb.Watc
 			target := filtered[id]
 			if newFile == nil && ev.Type == store.PUT {
 				if newFile, err = getConfigFile(ev.Value); err != nil {
-					glog.Warningf("failed to parse the value: %v", err)
+					glog.Warningf("Failed to parse the value: %v", err)
 					continue
 				}
 			}
 			if oldFile == nil && ev.PreviousValue != nil {
 				if oldFile, err = getConfigFile(ev.PreviousValue); err != nil {
-					glog.Warningf("failed to parse the value: %v", err)
+					glog.Warningf("Failed to parse the value: %v", err)
 					continue
 				}
 			}
@@ -171,29 +171,24 @@ func (s *WatcherServer) dispatchEvents(evs []store.Event) {
 		resp := &galleypb.WatchResponse{}
 		pbevs := filtered[id]
 		if log, ok := s.backlog[id]; ok {
-			if len(pbevs.Events) > 0 {
-				log = append(log, pbevs.Events...)
-			}
-			resp.ResponseUnion = &galleypb.WatchResponse_Events{
-				Events: &galleypb.WatchEvents{
-					Events: log,
-				},
-			}
+			pbevs.Events = append(log, pbevs.Events...)
 			delete(s.backlog, id)
+		}
+		if len(pbevs.Events) > 0 {
+			resp.ResponseUnion = &galleypb.WatchResponse_Events{Events: pbevs}
 		} else {
-			if pbevs := filtered[id]; len(pbevs.Events) > 0 {
-				resp.ResponseUnion = &galleypb.WatchResponse_Events{Events: pbevs}
-			} else {
-				resp.ResponseUnion = progress
-			}
+			resp.ResponseUnion = progress
 		}
 		select {
 		case w.ch <- resp:
 			// OK
 		default:
-			glog.Warningf("can't push events to %s", w)
 			if resp.GetEvents() != nil {
-				s.backlog[id] = resp.GetEvents().Events
+				events := resp.GetEvents().Events
+				glog.Warningf("Can't send watch events to %s; storing %d events as the backlog", w, len(events))
+				s.backlog[id] = events
+			} else {
+				glog.Warningf("Can't send watch progress event %+v to %s", progress.Progress, w)
 			}
 		}
 	}
@@ -239,7 +234,7 @@ func (s *WatcherServer) initiateWatcher(ctx context.Context, req *galleypb.Watch
 		for k, v := range data {
 			ifile := &internalpb.File{}
 			if err = proto.Unmarshal(v, ifile); err != nil {
-				glog.Errorf("failed to unmarshal a config file %s: %v", k, err)
+				glog.Errorf("Failed to unmarshal a config file %s: %v", k, err)
 				continue
 			}
 			filtered := watcher.filterConfigFile(ifile.Encoded)
@@ -285,6 +280,7 @@ func (s *WatcherServer) initiateWatcher(ctx context.Context, req *galleypb.Watch
 func (s *WatcherServer) removeWatcher(id int64) {
 	s.mu.Lock()
 	delete(s.watchers, id)
+	delete(s.backlog, id)
 	if len(s.watchers) == 0 {
 		s.cancelWatchChan()
 		s.cancelWatchChan = nil
